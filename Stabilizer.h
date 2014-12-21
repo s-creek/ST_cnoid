@@ -157,6 +157,9 @@ class Stabilizer
     return leg_pos(0) <= -1 * eefm_leg_rear_margin;
   };
 
+  //add by wu
+  Vector3 rot2rpy(Matrix3 R);
+
  protected:
   // Configuration variable declaration
   // <rtc-template block="config_declare">
@@ -252,7 +255,7 @@ class Stabilizer
   DeviceList<RateGyroSensor> RateGyroSensors;
   unsigned int m_debugLevel;
   VectorXd transition_joint_q, qorg, qrefv;
-  std::vector<std::string> sensor_names;
+  std::vector<std::string> sensor_names;//unuse
   std::map<std::string, ee_trans> ee_map;
   std::map<std::string, size_t> contact_states_index_map;
   std::vector<bool> contact_states, prev_contact_states;

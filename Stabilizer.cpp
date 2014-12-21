@@ -46,8 +46,8 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_qCurrentIn("qCurrent", m_qCurrent),
     m_qRefIn("qRef", m_qRef),
     m_rpyIn("rpy", m_rpy),
-    m_forceLIn("forceL", m_force[1]),
     m_forceRIn("forceR", m_force[0]),
+    m_forceLIn("forceL", m_force[1]),
     m_zmpRefIn("zmpRef", m_zmpRef),
     m_StabilizerServicePort("StabilizerService"),
     m_basePosIn("basePosIn", m_basePos),
@@ -141,8 +141,8 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   RTC::Properties& prop = getProperties();
   coil::stringTo(dt, prop["dt"].c_str());
 
-  /*
   // parameters for corba
+  /*
   RTC::Manager& rtcManager = RTC::Manager::instance();
   std::string nameServer = rtcManager.getConfig()["corba.nameservers"];
   int comPos = nameServer.find(",");
@@ -220,32 +220,31 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
     eefm_k2[i] =-0.3577664;
     eefm_k3[i] =-0.2223669;
     //org
-    //eefm_body_attitude_control_gain[i] = 1.0;
-    //eefm_body_attitude_control_time_const[i] = 1e5;
-    
-    //wutest
-    eefm_body_attitude_control_gain[i] = 0.2;
-    eefm_body_attitude_control_time_const[i] = 0.3;
+    eefm_body_attitude_control_gain[i] = 1.0;
+    eefm_body_attitude_control_time_const[i] = 1e5;
   }
-
-  //wutest
-  eefm_body_attitude_control_gain[1] = 0.5;
-  eefm_body_attitude_control_time_const[1] = 0.3;
-
-  //org
+ 
+  //org gain
   eefm_pos_damping_gain = 3500;
-  //eefm_rot_damping_gain = 20*5;
-
-  //wutest
-  //eefm_pos_damping_gain = 5*1e5;
-  eefm_rot_damping_gain = 1*1e5;
-
+  eefm_rot_damping_gain = 20*5;
   eefm_rot_time_const = 1;
   eefm_pos_time_const_support = 1;
   eefm_pos_time_const_swing = 0.04;
   eefm_pos_transition_time = 0.02;
   eefm_pos_margin_time = 0.02;
   eefm_zmp_delay_time_const[0] = eefm_zmp_delay_time_const[1] = 0.04;
+
+
+  //wutest
+  eefm_pos_damping_gain = 5*1e5;
+  eefm_rot_damping_gain = 1*1e3;
+  eefm_pos_time_const_support = 0.1;
+  eefm_rot_time_const = 0.1;
+  for(int i=0;i<2;i++){
+    eefm_body_attitude_control_gain[i] = 0.7;
+    eefm_body_attitude_control_time_const[i] = 0.1;
+  }
+
   //eefm_leg_inside_margin = 0.065; // [m]
   //eefm_leg_front_margin = 0.05;
   //eefm_leg_rear_margin = 0.05;
@@ -257,19 +256,21 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   eefm_cogvel_cutoff_freq = 35.3678; //[Hz]
 
   // parameters for RUNST
-  double ke = 0, tc = 0;
-  for (int i = 0; i < ST_NUM_LEGS; i++) {
-    //m_tau_x[i].setup(ke, tc, dt);
-    //m_tau_y[i].setup(ke, tc, dt);
-    //m_f_z.setup(ke, tc, dt);
+  {
+    double ke = 0, tc = 0;
+    for (int i = 0; i < ST_NUM_LEGS; i++) {
+      //m_tau_x[i].setup(ke, tc, dt);
+      //m_tau_y[i].setup(ke, tc, dt);
+      //m_f_z.setup(ke, tc, dt);
+    }
+    pangx_ref = pangy_ref = pangx = pangy = 0;
+    rdx = rdy = rx = ry = 0;
+    pdr = Vector3::Zero();
+    prev_act_force_z[0] = prev_act_force_z[1] = 0.0;
+    //unused by choreonoid lib
+    sensor_names.push_back("rfsensor");
+    sensor_names.push_back("lfsensor");
   }
-  pangx_ref = pangy_ref = pangx = pangy = 0;
-  rdx = rdy = rx = ry = 0;
-  pdr = Vector3::Zero();
-  prev_act_force_z[0] = prev_act_force_z[1] = 0.0;
-
-  sensor_names.push_back("rfsensor");
-  sensor_names.push_back("lfsensor");
 
   is_legged_robot = false;
   for (size_t i = 0; i < 2; i++) {
@@ -292,7 +293,8 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   loop = 0;
   if (is_legged_robot) {
     //zmp_origin_off = ee_map[m_robot->sensor<hrp::ForceSensor>(sensor_names[0])->link->name()].localp(2);
-    zmp_origin_off = ee_map["RLEG_JOINT5"].localp(2);
+    //no needed. calculated in getTarget
+    zmp_origin_off = ee_map["RLEG_JOINT5"].localp(2); 
   }
   //total_mass = m_robot->totalMass();
   total_mass = m_robot->mass();
@@ -508,10 +510,14 @@ void Stabilizer::getCurrentParameters ()
 void Stabilizer::calcFootOriginCoords (Vector3& foot_origin_pos, Matrix3& foot_origin_rot)
 {
   rats::coordinates leg_c[2], tmpc;
-  Vector3 ez = Vector3::UnitZ();
-  Vector3 ex = Vector3::UnitX();
+  //Vector3 ez = Vector3::UnitZ();
+  //Vector3 ex = Vector3::UnitX();
+  
   for (size_t i = 0; i < 2; i++) {
-    Link* target = forceSensors[i]->link();//m_robot->sensor<hrp::ForceSensor>(sensor_names[i])->link;
+    //Link* target =m_robot->sensor<hrp::ForceSensor>(sensor_names[i])->link;
+    Link* target = forceSensors[i]->link();
+    //org
+    /*
     leg_c[i].pos = target->p();
     Vector3 xv1(target->R() * ex);
     xv1(2)=0.0;
@@ -520,7 +526,13 @@ void Stabilizer::calcFootOriginCoords (Vector3& foot_origin_pos, Matrix3& foot_o
     leg_c[i].rot(0,0) = xv1(0); leg_c[i].rot(1,0) = xv1(1); leg_c[i].rot(2,0) = xv1(2);
     leg_c[i].rot(0,1) = yv1(0); leg_c[i].rot(1,1) = yv1(1); leg_c[i].rot(2,1) = yv1(2);
     leg_c[i].rot(0,2) = ez(0); leg_c[i].rot(1,2) = ez(1); leg_c[i].rot(2,2) = ez(2);
-  }
+    */
+    //wutest //maybe extractYow is needed
+    Vector3 euler =target->R().eulerAngles(2,1,0);
+    leg_c[i].pos = target->p() + target->R() * ee_map[target->name()].localp;
+    leg_c[i].rot=rotFromRpy(0.0, 0.0, euler(0));
+
+    }
   if (contact_states[contact_states_index_map["rleg"]] &&
       contact_states[contact_states_index_map["lleg"]]) {
     rats::mid_coords(tmpc, 0.5, leg_c[0], leg_c[1]);
@@ -554,9 +566,14 @@ void Stabilizer::getActualParameters ()
     Matrix3 senR = sen->link()->R() * sen->R_local();
     Matrix3 act_Rs(rotFromRpy(m_rpy.data.r, m_rpy.data.p, m_rpy.data.y));
     //Matrix3 act_Rs(hrp::rotFromRpy(m_rpy.data.r*0.5, m_rpy.data.p*0.5, m_rpy.data.y*0.5));
-    m_robot->rootLink()->R() = act_Rs * (senR.transpose() * m_robot->rootLink()->R());
+    //org
+    //m_robot->rootLink()->R() = act_Rs * (senR.transpose() * m_robot->rootLink()->R());
+    //wutest
+    Matrix3 R_root2chest=m_robot->rootLink()->R().transpose() *  sen->link()->R();
+    m_robot->rootLink()->R() = act_Rs * sen->R_local().transpose() * R_root2chest;
+    
     m_robot->calcForwardKinematics();
-    act_base_rpy = rpyFromRot(m_robot->rootLink()->R());
+    act_base_rpy = rot2rpy(m_robot->rootLink()->R());//rpyFromRot(m_robot->rootLink()->R());
     calcFootOriginCoords (foot_origin_pos, foot_origin_rot);
   } else {
     for ( int i = 0; i < m_robot->numJoints(); i++ ) {
@@ -577,8 +594,10 @@ void Stabilizer::getActualParameters ()
   }
   // <= Actual world frame
 
-  // convert absolute (in st) -> root-link relative
+  // convert absolute (in st) -> root-link relative 
+  //unused
   rel_act_zmp = m_robot->rootLink()->R().transpose() * (act_zmp - m_robot->rootLink()->p());
+  
   if (st_algorithm == OpenHRP::StabilizerService::EEFM) {
     // Actual foot_origin frame =>
     act_zmp = foot_origin_rot.transpose() * (act_zmp - foot_origin_pos);
@@ -603,7 +622,10 @@ void Stabilizer::getActualParameters ()
     Vector3 dcog=foot_origin_rot * (ref_cog - act_cog);
     Vector3 dcogvel=foot_origin_rot * (ref_cogvel - act_cogvel);
     Vector3 dzmp=foot_origin_rot * (ref_zmp - act_zmp);
+    
+    //this zmp is in ref_foot_origin 
     new_refzmp = foot_origin_rot * new_refzmp + foot_origin_pos;
+    //world frame
     for (size_t i = 0; i < 2; i++) {
       new_refzmp(i) += eefm_k1[i] * transition_smooth_gain * dcog(i) + eefm_k2[i] * transition_smooth_gain * dcogvel(i) + eefm_k3[i] * transition_smooth_gain * dzmp(i) + ref_zmp_aux(i);
     }
@@ -638,14 +660,14 @@ void Stabilizer::getActualParameters ()
       ref_foot_force[0] = Vector3(0,0, alpha * 9.8 * total_mass);
       ref_foot_force[1] = Vector3(0,0, (1-alpha) * 9.8 * total_mass);
       for (size_t i = 0; i < 2; i++) {
-        tau_0 -= (ee_pos[i] - new_refzmp).cross(ref_foot_force[i]);
+        tau_0 -= (ee_pos[i] - new_refzmp).cross(ref_foot_force[i]);//
       }
       if ( alpha == 0.0 ) { // lleg support
         ref_foot_moment[0] = Vector3::Zero();
-        ref_foot_moment[1] = -1 * (ee_pos[1] - new_refzmp).cross(ref_foot_force[1]);
+        ref_foot_moment[1] =  (ee_pos[1] - new_refzmp).cross(ref_foot_force[1]);
       } else if ( alpha == 1.0 ) { // rleg support
+	ref_foot_moment[0] =  (ee_pos[0] - new_refzmp).cross(ref_foot_force[0]);
         ref_foot_moment[1] = Vector3::Zero();
-        ref_foot_moment[0] = -1 * (ee_pos[0] - new_refzmp).cross(ref_foot_force[0]);
       } else { // double support
         // Foot-distribution-coords frame =>
         Vector3 foot_dist_coords_y = (ee_pos[1] - ee_pos[0]); // e_y'
@@ -665,16 +687,16 @@ void Stabilizer::getActualParameters ()
         Vector3 tau_0_f = foot_dist_coords_rot.transpose() * tau_0; // tau_0'
         // x
         // right
-        if (tau_0_f(0) > 0) ref_foot_moment[0](0) = tau_0_f(0);
+        if (tau_0_f(0) < 0) ref_foot_moment[0](0) = tau_0_f(0);
         else ref_foot_moment[0](0) = 0;
         // left
-        if (tau_0_f(0) > 0) ref_foot_moment[1](0) = 0;
+        if (tau_0_f(0) < 0) ref_foot_moment[1](0) = 0;
         else ref_foot_moment[1](0) = tau_0_f(0);
         // ref_foot_moment[0](0) = tau_0_f(0) * alpha;
         // ref_foot_moment[1](0) = tau_0_f(0) * (1-alpha);
         // y
-        ref_foot_moment[0](1) = tau_0_f(1) * alpha;
-        ref_foot_moment[1](1) = tau_0_f(1) * (1-alpha);
+        ref_foot_moment[0](1) =     alpha* tau_0_f(1);
+        ref_foot_moment[1](1) = (1-alpha)* tau_0_f(1);
         ref_foot_moment[0](2) = ref_foot_moment[1](2) = 0.0;
         // <= Foot-distribution-coords frame
         // Convert foot-distribution-coords frame => actual world frame
@@ -700,8 +722,9 @@ void Stabilizer::getActualParameters ()
     }
     //rpy control
     {
-      Vector3 act_root_rpy = rpyFromRot(m_robot->rootLink()->R());
-      Vector3 ref_root_rpy = rpyFromRot(target_root_R);
+      Vector3 act_root_rpy = rot2rpy(m_robot->rootLink()->R());
+                            //rpyFromRot(m_robot->rootLink()->R());
+      Vector3 ref_root_rpy = rot2rpy(target_root_R);//rpyFromRot(target_root_R);
       for (size_t i = 0; i < 2; i++) {
         d_rpy[i] = transition_smooth_gain * (eefm_body_attitude_control_gain[i] * (ref_root_rpy(i) - act_root_rpy(i)) - 1/eefm_body_attitude_control_time_const[i] * d_rpy[i]) * dt + d_rpy[i];
 
@@ -710,7 +733,8 @@ void Stabilizer::getActualParameters ()
       }
     }
 
-    // foor modif
+    // foot modif
+    //sensor->p_local() == ee_map[sensor->link()->name()].localp in simulation
     {
       double fz_diff = 0;
       double fz[2];//??
@@ -727,17 +751,18 @@ void Stabilizer::getActualParameters ()
         fz_diff += (i==0? -sensor_force(2) : sensor_force(2));
         fz[i] = sensor_force(2);
         // calcDampingControl
-        d_foot_rpy[i](0) = calcDampingControl(ref_foot_moment[i](0), ee_moment(0), d_foot_rpy[i](0), eefm_rot_damping_gain, eefm_rot_time_const);
-        d_foot_rpy[i](1) = calcDampingControl(ref_foot_moment[i](1), ee_moment(1), d_foot_rpy[i](1), eefm_rot_damping_gain, eefm_rot_time_const);
+        d_foot_rpy[i](0) = calcDampingControl(ref_foot_moment[i](0), ee_moment(0), d_foot_rpy[i](0), eefm_rot_damping_gain, eefm_rot_time_const);//roll
+        d_foot_rpy[i](1) = calcDampingControl(ref_foot_moment[i](1), ee_moment(1), d_foot_rpy[i](1), eefm_rot_damping_gain, eefm_rot_time_const);//pitch
         d_foot_rpy[i](0) = vlimit(d_foot_rpy[i](0), deg2rad(-10.0), deg2rad(10.0));
         d_foot_rpy[i](1) = vlimit(d_foot_rpy[i](1), deg2rad(-10.0), deg2rad(10.0));
         // Actual ee frame =>
-        ee_d_foot_rpy[i] = (sensor->link()->R() * ee_map[sensor->link()->name()].localR).transpose() * d_foot_rpy[i];
+        ee_d_foot_rpy[i] = (sensor->link()->R() * ee_map[sensor->link()->name()].localR).transpose() * d_foot_rpy[i];// desire torque and delta rpy is in inverse direction
 
 	//wutest
-	ee_d_foot_rpy[i] =Vector3::Zero();
+	//ee_d_foot_rpy[i] =Vector3::Zero();
       }
-      // Convert actual world frame => actual foot_origin frame for debug data port
+
+      // Convert actual world frame => actual foot_origin frame for debug data port.(unuse)
       ref_foot_moment[0] = foot_origin_rot.transpose() * ref_foot_moment[0];
       ref_foot_moment[1] = foot_origin_rot.transpose() * ref_foot_moment[1];
 
@@ -787,11 +812,14 @@ void Stabilizer::getActualParameters ()
       // }
     }
   } // st_algorithm == OpenHRP::StabilizerService::EEFM
+
+  //needed for idle mode
   for ( int i = 0; i < m_robot->numJoints(); i++ ){
     m_robot->joint(i)->q() = qrefv[i];
   }
   m_robot->rootLink()->p() = target_root_p;
   m_robot->rootLink()->R() = target_root_R;
+  
 
   /*
   // recalculate in calceeforceMomentcontrol
@@ -886,15 +914,16 @@ void Stabilizer::getTargetParameters ()
   }
   m_robot->rootLink()->p() = Vector3(m_basePos.data.x, m_basePos.data.y, m_basePos.data.z);
   target_root_p = m_robot->rootLink()->p();
-  target_root_R = rotFromRpy(m_baseRpy.data.r, m_baseRpy.data.p, m_baseRpy.data.y);
-  m_robot->rootLink()->R() = target_root_R;
+  m_robot->rootLink()->R()= rotFromRpy(m_baseRpy.data.r, m_baseRpy.data.p, m_baseRpy.data.y);
+  target_root_R = m_robot->rootLink()->R() ;
   m_robot->calcForwardKinematics();
   ref_zmp = m_robot->rootLink()->R() * Vector3(m_zmpRef.data.x, m_zmpRef.data.y, m_zmpRef.data.z) + m_robot->rootLink()->p(); // base frame -> world frame
+  
   if (st_algorithm == OpenHRP::StabilizerService::EEFM) {
     // apply inverse system
-    Vector3 tmp_ref_zmp = ref_zmp + eefm_zmp_delay_time_const[0] * (ref_zmp - prev_ref_zmp) / dt;
+    Vector3 tmp_ref_zmp=ref_zmp + eefm_zmp_delay_time_const[0] * (ref_zmp - prev_ref_zmp)/ dt;
    
-    //wutest
+    //wutest with out inverse system
     tmp_ref_zmp = ref_zmp;
 
     prev_ref_zmp = ref_zmp;
@@ -917,13 +946,17 @@ void Stabilizer::getTargetParameters ()
     Matrix3 foot_origin_rot;
     calcFootOriginCoords (foot_origin_pos, foot_origin_rot);
     // initialize for new_refzmp
-    new_refzmp = ref_zmp;
+    //new_refzmp = ref_zmp;
+    //use in calcEEForceMomentControl() latter
     rel_cog = m_robot->rootLink()->R().transpose() * (ref_cog-m_robot->rootLink()->p());
     // convert world (current-tmp) => local (foot_origin)
     zmp_origin_off = ref_zmp(2) - foot_origin_pos(2);
     ref_zmp = foot_origin_rot.transpose() * (ref_zmp - foot_origin_pos);
+    new_refzmp = ref_zmp;
+    //new_refzmp = foot_origin_rot.transpose() * (new_refzmp - foot_origin_pos);
     ref_cog = foot_origin_rot.transpose() * (ref_cog - foot_origin_pos);
-    new_refzmp = foot_origin_rot.transpose() * (new_refzmp - foot_origin_pos);
+   
+   
     if (contact_states != prev_contact_states) {
       ref_cogvel = (foot_origin_rot.transpose() * prev_ref_foot_origin_rot) * ref_cogvel;
     } else {
@@ -1036,6 +1069,7 @@ void Stabilizer::calcEEForceMomentControl() {
 
     // stabilizer loop
     if ( ( m_force[0].data.length() > 0 && m_force[1].data.length() > 0 ) ) {
+
       // return to referencea
       m_robot->rootLink()->R() = target_root_R;
       m_robot->rootLink()->p() = target_root_p;
@@ -1048,7 +1082,8 @@ void Stabilizer::calcEEForceMomentControl() {
       m_robot->rootLink()->R() = current_root_R;
       m_robot->rootLink()->p() = target_root_p + target_root_R * rel_cog - current_root_R * rel_cog;
       m_robot->calcForwardKinematics();
-      current_base_rpy = rpyFromRot(m_robot->rootLink()->R());
+      current_base_rpy = rot2rpy(m_robot->rootLink()->R());
+                         //rpyFromRot(m_robot->rootLink()->R());
       current_base_pos = m_robot->rootLink()->p();
 
       // foot modif
@@ -1057,7 +1092,7 @@ void Stabilizer::calcEEForceMomentControl() {
       {
         // moment control
 #define deg2rad(x) ((x) * M_PI / 180.0)
-        for (size_t i = 0; i < 2; i++) {
+        for (size_t i = 0; i < 2; i++) { //rotate and torque in inverse direction
             rats::rotm3times(total_target_foot_R[i], target_foot_R[i], rotFromRpy(-ee_d_foot_rpy[i](0), -ee_d_foot_rpy[i](1), 0));
         }
         for (size_t i = 0; i < 2; i++) {
@@ -1326,6 +1361,15 @@ static double vlimit(double value, double llimit_value, double ulimit_value)
   }
   return value;
 }
+
+Vector3 Stabilizer::rot2rpy(Matrix3 R)
+{
+  Vector3 euler =R.eulerAngles(2,1,0);
+  Vector3 out(euler(2), euler(1), euler(0));
+
+  return out;
+}
+
 /*
 static double switching_inpact_absorber(double force, double lower_th, double upper_th)
 {

@@ -157,9 +157,7 @@ class Stabilizer
     return leg_pos(0) <= -1 * eefm_leg_rear_margin;
   };
 
-  //add by wu
-  Vector3 rot2rpy(Matrix3 R);
-
+ 
  protected:
   // Configuration variable declaration
   // <rtc-template block="config_declare">

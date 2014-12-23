@@ -38,6 +38,8 @@ static const char* stabilizer_spec[] =
 
 #define MAX_TRANSITION_COUNT (2/dt)
 static double vlimit(double value, double llimit_value, double ulimit_value);
+//add by wu
+static Vector3 rot2rpy(Matrix3 R);
 //static double switching_inpact_absorber(double force, double lower_th, double upper_th);
 
 Stabilizer::Stabilizer(RTC::Manager* manager)
@@ -235,13 +237,17 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   eefm_zmp_delay_time_const[0] = eefm_zmp_delay_time_const[1] = 0.04;
 
 
-  //wutest
-  eefm_pos_damping_gain = 5*1e5;
-  eefm_rot_damping_gain = 1*1e3;
-  eefm_pos_time_const_support = 0.1;
+  //wutest gain
+  eefm_pos_damping_gain = 5*1e5;//org
+  eefm_pos_damping_gain = 1*1e5;
+  eefm_rot_damping_gain = 1*1e3;//org
+  eefm_rot_damping_gain = 800; 
+  eefm_pos_time_const_support = 0.1; 
+  //eefm_pos_time_const_swing = 0.1;
   eefm_rot_time_const = 0.1;
   for(int i=0;i<2;i++){
-    eefm_body_attitude_control_gain[i] = 0.7;
+    //eefm_body_attitude_control_gain[i] = 0.7;
+    //eefm_body_attitude_control_gain[i] = 1.3;
     eefm_body_attitude_control_time_const[i] = 0.1;
   }
 
@@ -286,6 +292,8 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   m_qCurrent.data.length(m_robot->numJoints());
   m_qRef.data.length(m_robot->numJoints());
   m_tau.data.length(m_robot->numJoints());
+  m_force[0].data.length(6);
+  m_force[1].data.length(6);
   transition_joint_q.resize(m_robot->numJoints());
   qorg.resize(m_robot->numJoints());
   qrefv.resize(m_robot->numJoints());
@@ -299,10 +307,15 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   //total_mass = m_robot->totalMass();
   total_mass = m_robot->mass();
   ref_zmp_aux = Vector3::Zero();
+  //for right and left foot
   for (size_t i = 0; i < m_contactStates.data.length(); i++) {
     contact_states.push_back(true);
     prev_contact_states.push_back(true);
   }
+
+  for ( int i = 0; i < m_robot->numJoints(); i++ )
+    m_qRef.data[i] = 0.0;
+
 
   // for debug output
   m_originRefZmp.data.x = m_originRefZmp.data.y = m_originRefZmp.data.z = 0.0;
@@ -378,6 +391,7 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
 
 
   loop++;
+  //std::cout<< transition_smooth_gain<<std::endl;
   // std::cout << m_profile.instance_name<< ": onExecute(" << ec_id << ")" << std::endl;
 
   if (m_qRefIn.isNew()) {
@@ -407,6 +421,12 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
   if (m_contactStatesIn.isNew()){
     m_contactStatesIn.read();
     for (size_t i = 0; i < m_contactStates.data.length(); i++) {
+      ///wutest///
+      ForceSensor* sensor=forceSensors[i];
+      Vector3 sensor_force = (sensor->link()->R() * sensor->R_local()) * Vector3(m_force[i].data[0], m_force[i].data[1], m_force[i].data[2]);
+      if(m_contactStates.data[i]==0&&sensor_force[2]>100)
+	m_contactStates.data[i]=1;
+      ///////////
       contact_states[i] = m_contactStates.data[i];
     }
   }
@@ -726,10 +746,11 @@ void Stabilizer::getActualParameters ()
                             //rpyFromRot(m_robot->rootLink()->R());
       Vector3 ref_root_rpy = rot2rpy(target_root_R);//rpyFromRot(target_root_R);
       for (size_t i = 0; i < 2; i++) {
-        d_rpy[i] = transition_smooth_gain * (eefm_body_attitude_control_gain[i] * (ref_root_rpy(i) - act_root_rpy(i)) - 1/eefm_body_attitude_control_time_const[i] * d_rpy[i]) * dt + d_rpy[i];
-
+        //d_rpy[i] = transition_smooth_gain * (eefm_body_attitude_control_gain[i] * (ref_root_rpy(i) - act_root_rpy(i)) - 1/eefm_body_attitude_control_time_const[i] * d_rpy[i]) * dt + d_rpy[i];
+	calcDampingControl(ref_root_rpy(i), act_root_rpy(i),  d_rpy[i], eefm_body_attitude_control_gain[i], eefm_body_attitude_control_time_const[i]);
+	
 	//wutest
-	d_rpy[i]=0;
+	//d_rpy[i]=0;
       }
     }
 
@@ -821,8 +842,9 @@ void Stabilizer::getActualParameters ()
   m_robot->rootLink()->R() = target_root_R;
   
 
-  /*
+ 
   // recalculate in calceeforceMomentcontrol
+  /*
   if ( !(control_mode == MODE_IDLE || control_mode == MODE_AIR) ) {
     for (size_t i = 0; i < 2; i++) {
       for ( int j = 0; j < manip2[i]->numJoints(); j++ ){
@@ -1092,7 +1114,7 @@ void Stabilizer::calcEEForceMomentControl() {
       {
         // moment control
 #define deg2rad(x) ((x) * M_PI / 180.0)
-        for (size_t i = 0; i < 2; i++) { //rotate and torque in inverse direction
+        for (size_t i = 0; i < 2; i++) { //rotate and desire torque is in inverse direction
             rats::rotm3times(total_target_foot_R[i], target_foot_R[i], rotFromRpy(-ee_d_foot_rpy[i](0), -ee_d_foot_rpy[i](1), 0));
         }
         for (size_t i = 0; i < 2; i++) {
@@ -1282,11 +1304,11 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
     k_brot_p[i] = i_stp.k_brot_p[i];
     k_brot_tc[i] = i_stp.k_brot_tc[i];
   }
-  std::cerr << "[" << m_profile.instance_name << "]  TPCC" << std::endl;
-  std::cerr << "[" << m_profile.instance_name << "]   k_tpcc_p  = [" << k_tpcc_p[0] << ", " <<  k_tpcc_p[1] << "]" << std::endl;
-  std::cerr << "[" << m_profile.instance_name << "]   k_tpcc_x  = [" << k_tpcc_x[0] << ", " << k_tpcc_x[1] << "]" << std::endl;
-  std::cerr << "[" << m_profile.instance_name << "]   k_brot_p  = [" << k_brot_p[0] << ", " << k_brot_p[1] << "]" << std::endl;
-  std::cerr << "[" << m_profile.instance_name << "]   k_brot_tc = [" << k_brot_tc[0] << ", " << k_brot_tc[1] << "]" << std::endl;
+  //std::cerr << "[" << m_profile.instance_name << "]  TPCC" << std::endl;
+  //std::cerr << "[" << m_profile.instance_name << "]   k_tpcc_p  = [" << k_tpcc_p[0] << ", " <<  k_tpcc_p[1] << "]" << std::endl;
+  //std::cerr << "[" << m_profile.instance_name << "]   k_tpcc_x  = [" << k_tpcc_x[0] << ", " << k_tpcc_x[1] << "]" << std::endl;
+  //std::cerr << "[" << m_profile.instance_name << "]   k_brot_p  = [" << k_brot_p[0] << ", " << k_brot_p[1] << "]" << std::endl;
+  //std::cerr << "[" << m_profile.instance_name << "]   k_brot_tc = [" << k_brot_tc[0] << ", " << k_brot_tc[1] << "]" << std::endl;
   for (size_t i = 0; i < 2; i++) {
     k_run_b[i] = i_stp.k_run_b[i];
     d_run_b[i] = i_stp.d_run_b[i];
@@ -1298,12 +1320,12 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
   m_torque_k[1] = i_stp.k_run_y;
   m_torque_d[0] = i_stp.d_run_x;
   m_torque_d[1] = i_stp.d_run_y;
-  std::cerr << "[" << m_profile.instance_name << "]  RUNST" << std::endl;
-  std::cerr << "[" << m_profile.instance_name << "]   m_torque_k  = [" << m_torque_k[0] << ", " <<  m_torque_k[1] << "]" << std::endl;
-  std::cerr << "[" << m_profile.instance_name << "]   m_torque_d  = [" << m_torque_d[0] << ", " <<  m_torque_d[1] << "]" << std::endl;
-  std::cerr << "[" << m_profile.instance_name << "]   k_run_b  = [" << k_run_b[0] << ", " <<  k_run_b[1] << "]" << std::endl;
-  std::cerr << "[" << m_profile.instance_name << "]   d_run_b  = [" << d_run_b[0] << ", " <<  d_run_b[1] << "]" << std::endl;
-  std::cerr << "[" << m_profile.instance_name << "]  EEFM" << std::endl;
+  //std::cerr << "[" << m_profile.instance_name << "]  RUNST" << std::endl;
+  //std::cerr << "[" << m_profile.instance_name << "]   m_torque_k  = [" << m_torque_k[0] << ", " <<  m_torque_k[1] << "]" << std::endl;
+  //std::cerr << "[" << m_profile.instance_name << "]   m_torque_d  = [" << m_torque_d[0] << ", " <<  m_torque_d[1] << "]" << std::endl;
+  //std::cerr << "[" << m_profile.instance_name << "]   k_run_b  = [" << k_run_b[0] << ", " <<  k_run_b[1] << "]" << std::endl;
+  //std::cerr << "[" << m_profile.instance_name << "]   d_run_b  = [" << d_run_b[0] << ", " <<  d_run_b[1] << "]" << std::endl;
+  //std::cerr << "[" << m_profile.instance_name << "]  EEFM" << std::endl;
   for (size_t i = 0; i < 2; i++) {
     eefm_k1[i] = i_stp.eefm_k1[i];
     eefm_k2[i] = i_stp.eefm_k2[i];
@@ -1338,12 +1360,15 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
   std::cerr << "[" << m_profile.instance_name << "]   eefm_leg_inside_margin = " << eefm_leg_inside_margin << "[m], eefm_leg_front_margin = " << eefm_leg_front_margin << "[m], eefm_leg_rear_margin = " << eefm_leg_rear_margin << "[m]" << std::endl;
   std::cerr << "[" << m_profile.instance_name << "]   eefm_cogvel_cutoff_freq = " << eefm_cogvel_cutoff_freq << "[Hz]" << std::endl;
   std::cerr << "[" << m_profile.instance_name << "]  COMMON" << std::endl;
+  
   if (control_mode == MODE_IDLE) {
     st_algorithm = i_stp.st_algorithm;
     std::cerr << "[" << m_profile.instance_name << "]   st_algorithm changed to [" << (st_algorithm == OpenHRP::StabilizerService::EEFM?"EEFM":"TPCC") << "]" << std::endl;
   } else {
     std::cerr << "[" << m_profile.instance_name << "]   st_algorithm cannot be changed to [" << (st_algorithm == OpenHRP::StabilizerService::EEFM?"EEFM":"TPCC") << "] during MODE_AIR or MODE_ST." << std::endl;
   }
+
+  std::cerr <<'\n'<<std::endl;
 }
 
 void Stabilizer::waitSTTransition()
@@ -1351,7 +1376,7 @@ void Stabilizer::waitSTTransition()
   while (transition_count != 0) usleep(10);
   usleep(10);
 }
-
+//why this can compiler??
 static double vlimit(double value, double llimit_value, double ulimit_value)
 {
   if (value > ulimit_value) {
@@ -1362,7 +1387,7 @@ static double vlimit(double value, double llimit_value, double ulimit_value)
   return value;
 }
 
-Vector3 Stabilizer::rot2rpy(Matrix3 R)
+static Vector3 rot2rpy(Matrix3 R)
 {
   Vector3 euler =R.eulerAngles(2,1,0);
   Vector3 out(euler(2), euler(1), euler(0));

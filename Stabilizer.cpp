@@ -228,7 +228,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
  
   //org gain
   eefm_pos_damping_gain = 3500;
-  eefm_rot_damping_gain = 20*5;
+  //eefm_rot_damping_gain = 20*5;
   eefm_rot_time_const = 1;
   eefm_pos_time_const_support = 1;
   eefm_pos_time_const_swing = 0.04;
@@ -238,19 +238,18 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
 
 
   //wutest gain
-  eefm_pos_damping_gain = 5*1e5;//org
-  eefm_pos_damping_gain = 1*1e5;
-  eefm_rot_damping_gain = 1*1e3;//org
-  eefm_rot_damping_gain = 800; 
+  eefm_pos_damping_gain = 2*1e5;
+  eefm_rot_damping_gain[0] = 1000; 
+  eefm_rot_damping_gain[1] = 750; 
   eefm_pos_time_const_support = 0.1; 
   //eefm_pos_time_const_swing = 0.1;
   eefm_rot_time_const = 0.1;
   for(int i=0;i<2;i++){
-    //eefm_body_attitude_control_gain[i] = 0.7;
+    eefm_body_attitude_control_gain[i] = 0.1;
     //eefm_body_attitude_control_gain[i] = 1.3;
-    eefm_body_attitude_control_time_const[i] = 0.1;
+    eefm_body_attitude_control_time_const[i] = 0.003;
   }
-
+  eefm_pos_control_switch=eefm_rot_control_switch=eefm_att_control_switch=1;
   //eefm_leg_inside_margin = 0.065; // [m]
   //eefm_leg_front_margin = 0.05;
   //eefm_leg_rear_margin = 0.05;
@@ -337,6 +336,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   //wu
   step_counter=0;
   coil::stringTo(m_nStep, prop["wutest.nStep"].c_str());
+  force_dz_offset=-40.824;
 
   return RTC::RTC_OK;
 }
@@ -421,13 +421,13 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
   if (m_contactStatesIn.isNew()){
     m_contactStatesIn.read();
     for (size_t i = 0; i < m_contactStates.data.length(); i++) {
+      contact_states[i] = m_contactStates.data[i];
       ///wutest///
       ForceSensor* sensor=forceSensors[i];
       Vector3 sensor_force = (sensor->link()->R() * sensor->R_local()) * Vector3(m_force[i].data[0], m_force[i].data[1], m_force[i].data[2]);
       if(m_contactStates.data[i]==0&&sensor_force[2]>100)
-	m_contactStates.data[i]=1;
+	contact_states[i]=1;
       ///////////
-      contact_states[i] = m_contactStates.data[i];
     }
   }
   if (m_controlSwingSupportTimeIn.isNew()){
@@ -742,15 +742,17 @@ void Stabilizer::getActualParameters ()
     }
     //rpy control
     {
+#define deg2rad(x) ((x) * M_PI / 180.0)
       Vector3 act_root_rpy = rot2rpy(m_robot->rootLink()->R());
                             //rpyFromRot(m_robot->rootLink()->R());
       Vector3 ref_root_rpy = rot2rpy(target_root_R);//rpyFromRot(target_root_R);
       for (size_t i = 0; i < 2; i++) {
         //d_rpy[i] = transition_smooth_gain * (eefm_body_attitude_control_gain[i] * (ref_root_rpy(i) - act_root_rpy(i)) - 1/eefm_body_attitude_control_time_const[i] * d_rpy[i]) * dt + d_rpy[i];
-	calcDampingControl(ref_root_rpy(i), act_root_rpy(i),  d_rpy[i], eefm_body_attitude_control_gain[i], eefm_body_attitude_control_time_const[i]);
-	
+	d_rpy[i]=calcDampingControl(ref_root_rpy(i), act_root_rpy(i),  d_rpy[i], eefm_body_attitude_control_gain[i], eefm_body_attitude_control_time_const[i]);
+	d_rpy[i] = vlimit(d_rpy[i], deg2rad(-10.0), deg2rad(10.0));
 	//wutest
-	//d_rpy[i]=0;
+	if(!eefm_att_control_switch)
+	  d_rpy[i]=0;
       }
     }
 
@@ -758,7 +760,7 @@ void Stabilizer::getActualParameters ()
     //sensor->p_local() == ee_map[sensor->link()->name()].localp in simulation
     {
       double fz_diff = 0;
-      double fz[2];//??
+      double fz[2];//i dont use this
       // moment control
 #define deg2rad(x) ((x) * M_PI / 180.0)
       for (size_t i = 0; i < 2; i++) {
@@ -772,15 +774,16 @@ void Stabilizer::getActualParameters ()
         fz_diff += (i==0? -sensor_force(2) : sensor_force(2));
         fz[i] = sensor_force(2);
         // calcDampingControl
-        d_foot_rpy[i](0) = calcDampingControl(ref_foot_moment[i](0), ee_moment(0), d_foot_rpy[i](0), eefm_rot_damping_gain, eefm_rot_time_const);//roll
-        d_foot_rpy[i](1) = calcDampingControl(ref_foot_moment[i](1), ee_moment(1), d_foot_rpy[i](1), eefm_rot_damping_gain, eefm_rot_time_const);//pitch
+        d_foot_rpy[i](0) = calcDampingControl(ref_foot_moment[i](0), ee_moment(0), d_foot_rpy[i](0), eefm_rot_damping_gain[i], eefm_rot_time_const);//roll
+        d_foot_rpy[i](1) = calcDampingControl(ref_foot_moment[i](1), ee_moment(1), d_foot_rpy[i](1), eefm_rot_damping_gain[i], eefm_rot_time_const);//pitch
         d_foot_rpy[i](0) = vlimit(d_foot_rpy[i](0), deg2rad(-10.0), deg2rad(10.0));
         d_foot_rpy[i](1) = vlimit(d_foot_rpy[i](1), deg2rad(-10.0), deg2rad(10.0));
         // Actual ee frame =>
         ee_d_foot_rpy[i] = (sensor->link()->R() * ee_map[sensor->link()->name()].localR).transpose() * d_foot_rpy[i];// desire torque and delta rpy is in inverse direction
 
 	//wutest
-	//ee_d_foot_rpy[i] =Vector3::Zero();
+	if(!eefm_rot_control_switch)
+	  ee_d_foot_rpy[i] =Vector3::Zero();
       }
 
       // Convert actual world frame => actual foot_origin frame for debug data port.(unuse)
@@ -790,12 +793,17 @@ void Stabilizer::getActualParameters ()
       // fz control
       // foot force difference control version
       double ref_fz_diff = (ref_foot_force[1](2)-ref_foot_force[0](2));
+
+      //wutest because the force  z in two legs in Inipos is different
+      fz_diff-=force_dz_offset;
+
       if ( (contact_states[contact_states_index_map["rleg"]] && contact_states[contact_states_index_map["lleg"]]) // Reference : double support phase
            || (isContact(0) && isContact(1)) ) { // Actual : double support phase
         zctrl = calcDampingControl (ref_fz_diff, fz_diff, zctrl,
                                     eefm_pos_damping_gain, eefm_pos_time_const_support);
 	//wutest
-	//zctrl=0;
+	if(!eefm_pos_control_switch)
+	  zctrl=0;
       } 
       else {
 	/*
@@ -1098,15 +1106,22 @@ void Stabilizer::calcEEForceMomentControl() {
       for ( int i = 0; i < m_robot->numJoints(); i++ ) {
         m_robot->joint(i)->q() = qrefv[i];
       }
-
+     
       //rpy control
       rats::rotm3times(current_root_R, target_root_R, rotFromRpy(d_rpy[0], d_rpy[1], 0));
-      m_robot->rootLink()->R() = current_root_R;
-      m_robot->rootLink()->p() = target_root_p + target_root_R * rel_cog - current_root_R * rel_cog;
+     
+      //org
+      //m_robot->rootLink()->R() = current_root_R;
+      //m_robot->rootLink()->p() = target_root_p + target_root_R * rel_cog - current_root_R * rel_cog;
+      //m_robot->calcForwardKinematics();
+      //current_base_rpy = rot2rpy(m_robot->rootLink()->R());//for log
+      //current_base_pos = m_robot->rootLink()->p();//for log
+      
+      //wutest rotate waist, keep foot and CoM in the same place
       m_robot->calcForwardKinematics();
-      current_base_rpy = rot2rpy(m_robot->rootLink()->R());
-                         //rpyFromRot(m_robot->rootLink()->R());
-      current_base_pos = m_robot->rootLink()->p();
+      if(!CalcIVK_biped(m_robot, current_root_R, m_contactStates))
+	std::cout<<"InverseKinametic bipped error"<<std::endl;
+
 
       // foot modif
       Vector3 total_target_foot_p[2];
@@ -1272,8 +1287,9 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
     i_stp.eefm_ref_zmp_aux[i] = ref_zmp_aux(i);
     i_stp.eefm_body_attitude_control_time_const[i] = eefm_body_attitude_control_time_const[i];
     i_stp.eefm_body_attitude_control_gain[i] = eefm_body_attitude_control_gain[i];
+    i_stp.eefm_rot_damping_gain[i] = eefm_rot_damping_gain[i];
   }
-  i_stp.eefm_rot_damping_gain = eefm_rot_damping_gain;
+
   i_stp.eefm_pos_damping_gain = eefm_pos_damping_gain;
   i_stp.eefm_rot_time_const = eefm_rot_time_const;
   i_stp.eefm_pos_time_const_support = eefm_pos_time_const_support;
@@ -1285,6 +1301,11 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
   i_stp.eefm_leg_rear_margin = eefm_leg_rear_margin;
   i_stp.eefm_cogvel_cutoff_freq = eefm_cogvel_cutoff_freq;
   i_stp.st_algorithm = st_algorithm;
+  //wutest
+  i_stp.eefm_pos_control_switch = eefm_pos_control_switch;
+  i_stp.eefm_rot_control_switch = eefm_rot_control_switch;
+  i_stp.eefm_att_control_switch = eefm_att_control_switch;
+
   switch(control_mode) {
   case MODE_IDLE: i_stp.controller_mode = OpenHRP::StabilizerService::MODE_IDLE; break;
   case MODE_AIR: i_stp.controller_mode = OpenHRP::StabilizerService::MODE_AIR; break;
@@ -1334,8 +1355,9 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
     ref_zmp_aux(i) = i_stp.eefm_ref_zmp_aux[i];
     eefm_body_attitude_control_gain[i] = i_stp.eefm_body_attitude_control_gain[i];
     eefm_body_attitude_control_time_const[i] = i_stp.eefm_body_attitude_control_time_const[i];
+    eefm_rot_damping_gain[i] = i_stp.eefm_rot_damping_gain[i];
   }
-  eefm_rot_damping_gain = i_stp.eefm_rot_damping_gain;
+ 
   eefm_pos_damping_gain = i_stp.eefm_pos_damping_gain;
   eefm_rot_time_const = i_stp.eefm_rot_time_const;
   eefm_pos_time_const_support = i_stp.eefm_pos_time_const_support;
@@ -1346,17 +1368,23 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
   eefm_leg_front_margin = i_stp.eefm_leg_front_margin;
   eefm_leg_rear_margin = i_stp.eefm_leg_rear_margin;
   eefm_cogvel_cutoff_freq = i_stp.eefm_cogvel_cutoff_freq;
-  std::cerr << "[" << m_profile.instance_name << "]   eefm_k1  = [" << eefm_k1[0] << ", " << eefm_k1[1] << "]" << std::endl;
+  
+  //wutest
+  eefm_pos_control_switch=  i_stp.eefm_pos_control_switch;
+  eefm_rot_control_switch=  i_stp.eefm_rot_control_switch;
+  eefm_att_control_switch=  i_stp.eefm_att_control_switch;
+
+std::cerr << "[" << m_profile.instance_name << "]   eefm_k1  = [" << eefm_k1[0] << ", " << eefm_k1[1] << "]" << std::endl;
   std::cerr << "[" << m_profile.instance_name << "]   eefm_k2  = [" << eefm_k2[0] << ", " << eefm_k2[1] << "]" << std::endl;
   std::cerr << "[" << m_profile.instance_name << "]   eefm_k3  = [" << eefm_k3[0] << ", " << eefm_k3[1] << "]" << std::endl;
   std::cerr << "[" << m_profile.instance_name << "]   eefm_zmp_delay_time_const  = [" << eefm_zmp_delay_time_const[0] << ", " << eefm_zmp_delay_time_const[1] << "][s]" << std::endl;
   std::cerr << "[" << m_profile.instance_name << "]   eefm_ref_zmp_aux  = [" << ref_zmp_aux(0) << ", " << ref_zmp_aux(1) << "][m]" << std::endl;
-  std::cerr << "[" << m_profile.instance_name << "]   eefm_body_attitude_control_gain  = [" << eefm_body_attitude_control_gain[0] << ", " << eefm_body_attitude_control_gain[1] << "]" << std::endl;
+  std::cerr << "[" << m_profile.instance_name << "]   eefm_body_attitude_control_gain  = [" << eefm_body_attitude_control_gain[0] << ", " << eefm_body_attitude_control_gain[1] <<"]"<<" switch "<<eefm_att_control_switch << std::endl;
   std::cerr << "[" << m_profile.instance_name << "]   eefm_body_attitude_control_time_const  = [" << eefm_body_attitude_control_time_const[0] << ", " << eefm_body_attitude_control_time_const[1] << "][s]" << std::endl;
-  std::cerr << "[" << m_profile.instance_name << "]   eefm_rot_damping_gain = " << eefm_rot_damping_gain << ", eefm_rot_time_const = " << eefm_rot_time_const << "[s]" << std::endl;
+  std::cerr << "[" << m_profile.instance_name << "]   eefm_rot_damping_gain = " << eefm_rot_damping_gain[0]<<" "<<  eefm_rot_damping_gain[1]<< ", eefm_rot_time_const = " << eefm_rot_time_const << "[s]" <<" switch "<<eefm_rot_control_switch<< std::endl;
   std::cerr << "[" << m_profile.instance_name << "]   eefm_pos_damping_gain = " << eefm_pos_damping_gain << ", eefm_pos_time_const_support = " << eefm_pos_time_const_support << "[s], "
             << "eefm_pos_time_const_swing = " << eefm_pos_time_const_swing << "[s]" << std::endl;
-  std::cerr << "[" << m_profile.instance_name << "]   eefm_pos_transition_time = " << eefm_pos_transition_time << "[s], eefm_pos_margin_time = " << eefm_pos_margin_time << "[s]" << std::endl;
+  std::cerr << "[" << m_profile.instance_name << "]   eefm_pos_transition_time = " << eefm_pos_transition_time << "[s], eefm_pos_margin_time = " << eefm_pos_margin_time << "[s]" <<" switch "<<eefm_pos_control_switch<< std::endl;
   std::cerr << "[" << m_profile.instance_name << "]   eefm_leg_inside_margin = " << eefm_leg_inside_margin << "[m], eefm_leg_front_margin = " << eefm_leg_front_margin << "[m], eefm_leg_rear_margin = " << eefm_leg_rear_margin << "[m]" << std::endl;
   std::cerr << "[" << m_profile.instance_name << "]   eefm_cogvel_cutoff_freq = " << eefm_cogvel_cutoff_freq << "[Hz]" << std::endl;
   std::cerr << "[" << m_profile.instance_name << "]  COMMON" << std::endl;
@@ -1376,7 +1404,7 @@ void Stabilizer::waitSTTransition()
   while (transition_count != 0) usleep(10);
   usleep(10);
 }
-//why this can compiler??
+
 static double vlimit(double value, double llimit_value, double ulimit_value)
 {
   if (value > ulimit_value) {

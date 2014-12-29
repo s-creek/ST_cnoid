@@ -290,6 +290,8 @@ class Stabilizer
   int step_counter;
   int m_nStep;
   double force_dz_offset;
+  Vector3 dzmp;
+  Vector3 wzmp;
 };
 
 

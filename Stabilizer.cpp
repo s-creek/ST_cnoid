@@ -218,9 +218,15 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
     //eefm_k3[i] = -0.18*k_ratio;
 
     //calc by wu
+    //when Tc=0.04
+    //eefm_k1[i] =-1.2310124;
+    //eefm_k2[i] =-0.3577664;
+    //eefm_k3[i] =-0.2223669;
+    //when Tc=0.05
     eefm_k1[i] =-1.2310124;
     eefm_k2[i] =-0.3577664;
-    eefm_k3[i] =-0.2223669;
+    eefm_k3[i] =-0.0223669;
+
     //org
     eefm_body_attitude_control_gain[i] = 1.0;
     eefm_body_attitude_control_time_const[i] = 1e5;
@@ -336,7 +342,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   //wu
   step_counter=0;
   coil::stringTo(m_nStep, prop["wutest.nStep"].c_str());
-  force_dz_offset=-40.824;
+  force_dz_offset=40.824;
 
   return RTC::RTC_OK;
 }
@@ -679,6 +685,13 @@ void Stabilizer::getActualParameters ()
       double alpha = calcAlpha(new_refzmp, ee_pos, ee_rot);
       ref_foot_force[0] = Vector3(0,0, alpha * 9.8 * total_mass);
       ref_foot_force[1] = Vector3(0,0, (1-alpha) * 9.8 * total_mass);
+
+      //wutest
+      ref_foot_force[0](2)+=force_dz_offset/2;
+      ref_foot_force[1](2)-=force_dz_offset/2;
+      
+
+
       for (size_t i = 0; i < 2; i++) {
         tau_0 -= (ee_pos[i] - new_refzmp).cross(ref_foot_force[i]);//
       }
@@ -795,7 +808,7 @@ void Stabilizer::getActualParameters ()
       double ref_fz_diff = (ref_foot_force[1](2)-ref_foot_force[0](2));
 
       //wutest because the force  z in two legs in Inipos is different
-      fz_diff-=force_dz_offset;
+      //fz_diff+=force_dz_offset;
 
       if ( (contact_states[contact_states_index_map["rleg"]] && contact_states[contact_states_index_map["lleg"]]) // Reference : double support phase
            || (isContact(0) && isContact(1)) ) { // Actual : double support phase
@@ -1013,6 +1026,7 @@ bool Stabilizer::calcZMP(Vector3& ret_zmp, const double zmp_z)
     rats::rotm3times(tmpR, sensor->link()->R(), sensor->R_local());
     Vector3 nf = tmpR * Vector3(m_force[i].data[0], m_force[i].data[1], m_force[i].data[2]);
     Vector3 nm = tmpR * Vector3(m_force[i].data[3], m_force[i].data[4], m_force[i].data[5]);
+    
     tmpzmpx += nf(2) * fsp(0) - (fsp(2) - zmp_z) * nf(0) - nm(1);
     tmpzmpy += nf(2) * fsp(1) - (fsp(2) - zmp_z) * nf(1) + nm(0);
     tmpfz += nf(2);

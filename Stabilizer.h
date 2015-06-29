@@ -292,6 +292,9 @@ class Stabilizer
   double force_dz_offset;
   Vector3 dzmp;
   Vector3 wzmp;
+
+  // ogawa
+  void setEefmParameters();
 };
 
 

@@ -166,7 +166,13 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   cnoid::BodyLoader bl;
   m_robot=bl.load( prop["model"].c_str());
   std::cout<<"ST dof robot "<<m_robot->numJoints()<<std::endl;
-  m_robot->rootLink()->p()<<0.0, 0.0, 0.705;
+  //m_robot->rootLink()->p()<<0.0, 0.0, 0.705;
+  
+  // ogawa
+  double init_waist_height;
+  coil::stringTo(init_waist_height, prop["waist_height"].c_str());
+  m_robot->rootLink()->p() << 0, 0, init_waist_height;
+  
   //std::cout<<"R "<<m_robot->rootLink()->name()<<std::endl;
   m_robot->calcForwardKinematics();
   m_robot->calcCenterOfMass();
@@ -307,7 +313,9 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   if (is_legged_robot) {
     //zmp_origin_off = ee_map[m_robot->sensor<hrp::ForceSensor>(sensor_names[0])->link->name()].localp(2);
     //no needed. calculated in getTarget
-    zmp_origin_off = ee_map["RLEG_JOINT5"].localp(2); 
+    //zmp_origin_off = ee_map["RLEG_JOINT5"].localp(2); 
+    // ogawa
+    zmp_origin_off = ee_map[ end_effectors_str[1] ].localp(2);
   }
   //total_mass = m_robot->totalMass();
   total_mass = m_robot->mass();

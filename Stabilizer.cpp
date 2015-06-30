@@ -142,6 +142,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   // </rtc-template>
   RTC::Properties& prop = getProperties();
   coil::stringTo(dt, prop["dt"].c_str());
+  dt = 0.005;
 
   // parameters for corba
   /*
@@ -173,6 +174,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   double init_waist_height;
   coil::stringTo(init_waist_height, prop["waist_height"].c_str());
   m_robot->rootLink()->p() << 0, 0, init_waist_height;
+  std::cout << "waist height = " << init_waist_height << std::endl;
   
   //std::cout<<"R "<<m_robot->rootLink()->name()<<std::endl;
   m_robot->calcForwardKinematics();
@@ -208,6 +210,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
     }
     m_contactStates.data.length(num);
   }
+
 
   // parameters for TPCC
   act_zmp = Vector3::Zero();
@@ -275,6 +278,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
 
   // ogawa
   setEefmParameters();
+
 
   // parameters for RUNST
   {
@@ -443,7 +447,7 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       ///wutest///
       ForceSensor* sensor=forceSensors[i];
       Vector3 sensor_force = (sensor->link()->R() * sensor->R_local()) * Vector3(m_force[i].data[0], m_force[i].data[1], m_force[i].data[2]);
-      if(m_contactStates.data[i]==0&&sensor_force[2]>100)
+      if(m_contactStates.data[i]==0 && sensor_force[2]>100 )
 	contact_states[i]=1;
       ///////////
     }
@@ -1778,6 +1782,7 @@ void Stabilizer::setEefmParameters()
   coil::stringTo(prop_eefm_rot, prop["eefm_rot"].c_str());
   eefm_rot_damping_gain[0] = prop_eefm_rot[0];
   eefm_rot_damping_gain[1] = prop_eefm_rot[1];
+  eefm_rot_time_const      = prop_eefm_rot[2];
 
   std::vector<double> prop_eefm_pos;
   coil::stringTo(prop_eefm_pos, prop["eefm_pos"].c_str());
@@ -1825,6 +1830,13 @@ void Stabilizer::setEefmParameters()
 	    << "eefm cog : " << std::endl
 	    << "  cutoff freq = " << eefm_cogvel_cutoff_freq << std::endl
 	    << std::endl;
+
+
+  prev_act_cog    = Vector3::Zero();
+  prev_act_cogvel = Vector3::Zero();
+  prev_ref_cog    = Vector3::Zero();
+  prev_ref_zmp    = Vector3::Zero();
+  prev_ref_foot_origin_rot = Matrix3::Identity();
 }
 
 

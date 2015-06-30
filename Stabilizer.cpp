@@ -142,7 +142,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   // </rtc-template>
   RTC::Properties& prop = getProperties();
   coil::stringTo(dt, prop["dt"].c_str());
-  dt = 0.005;
+  dt = 0.0025;
 
   // parameters for corba
   /*
@@ -665,12 +665,17 @@ void Stabilizer::getActualParameters ()
     Vector3 dcogvel=foot_origin_rot * (ref_cogvel - act_cogvel);
     Vector3 dzmp=foot_origin_rot * (ref_zmp - act_zmp);
     
-    //this zmp is in ref_foot_origin 
-    new_refzmp = foot_origin_rot * new_refzmp + foot_origin_pos;
     //world frame
+    //new_refzmp = foot_origin_rot * new_refzmp + foot_origin_pos;
+
+    //this zmp is in ref_foot_origin 
     for (size_t i = 0; i < 2; i++) {
       new_refzmp(i) += eefm_k1[i] * transition_smooth_gain * dcog(i) + eefm_k2[i] * transition_smooth_gain * dcogvel(i) + eefm_k3[i] * transition_smooth_gain * dzmp(i) + ref_zmp_aux(i);
     }
+    // ogawa
+    //world frame
+    new_refzmp = foot_origin_rot * new_refzmp + foot_origin_pos;
+
     if (DEBUGP) {
       std::cerr << "[" << m_profile.instance_name << "] state values" << std::endl;
       std::cerr << "[" << m_profile.instance_name << "]   "

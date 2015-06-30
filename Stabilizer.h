@@ -20,8 +20,8 @@
 //#include <hrpModel/Body.h>
 
 #include <cnoid/Body>
-#include<cnoid/BodyLoader>
-#include<cnoid/VRMLBodyLoader>
+#include <cnoid/BodyLoader>
+#include <cnoid/VRMLBodyLoader>
 #include <cnoid/EigenTypes>
 #include <cnoid/JointPath>
 #include <cnoid/Jacobian>

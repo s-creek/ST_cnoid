@@ -7,6 +7,7 @@ if (NOT CMAKE_MODULE_PATH)
 endif (NOT CMAKE_MODULE_PATH)
 
 add_definitions(-std=gnu++0x)
+add_definitions(-std=c++0x)
 
 
 ####

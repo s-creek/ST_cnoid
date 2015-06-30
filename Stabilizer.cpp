@@ -56,6 +56,7 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_baseRpyIn("baseRpyIn", m_baseRpy),
     m_contactStatesIn("contactStates", m_contactStates),
     m_controlSwingSupportTimeIn("controlSwingSupportTime", m_controlSwingSupportTime),
+    m_localEEposIn("localEEpos", m_localEEpos),
     m_qRefOut("q", m_qRef),
     m_tauOut("tau", m_tau),
     m_zmpOut("zmp", m_zmp),
@@ -109,6 +110,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addInPort("baseRpyIn", m_baseRpyIn);
   addInPort("contactStates", m_contactStatesIn);
   addInPort("controlSwingSupportTime", m_controlSwingSupportTimeIn);
+  addInPort("localEEpos",m_localEEposIn);
 
   // Set OutPort buffer
   addOutPort("q", m_qRefOut);
@@ -141,7 +143,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   
   // </rtc-template>
   RTC::Properties& prop = getProperties();
-  coil::stringTo(dt, prop["dt"].c_str());
+  coil::stringTo(dt, prop["Stabilizer.dt"].c_str());
 
   // parameters for corba
   /*
@@ -201,6 +203,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
     }
     m_contactStates.data.length(num);
   }
+ 
 
   // parameters for TPCC
   act_zmp = Vector3::Zero();
@@ -222,11 +225,12 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
     //eefm_k1[i] =-1.2310124;
     //eefm_k2[i] =-0.3577664;
     //eefm_k3[i] =-0.2223669;
-    //when Tc=0.05
+    //when Tc=0.05 pole -13 -3 -wc
     eefm_k1[i] =-1.2310124;
     eefm_k2[i] =-0.3577664;
     eefm_k3[i] =-0.0223669;
 
+   
     //org
     eefm_body_attitude_control_gain[i] = 1.0;
     eefm_body_attitude_control_time_const[i] = 1e5;
@@ -342,7 +346,8 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   //wu
   step_counter=0;
   coil::stringTo(m_nStep, prop["wutest.nStep"].c_str());
-  force_dz_offset=40.824;
+  //force_dz_offset=40.824;
+  force_dz_offset=40.7735;
 
   return RTC::RTC_OK;
 }
@@ -439,7 +444,15 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
   if (m_controlSwingSupportTimeIn.isNew()){
     m_controlSwingSupportTimeIn.read();
   }
-
+  /*
+  if(m_localEEposIn.isNew()){
+    m_localEEposIn.read();
+    for(int i=0;i<3;i++){
+      ee_map["RLEG_JOINT5"].localp(i)= m_localEEpos.data[i];
+      ee_map["LLEG_JOINT5"].localp(i)= m_localEEpos.data[i+3];
+    } 
+  }
+  */
   if (is_legged_robot) {
     getCurrentParameters();
     getTargetParameters();

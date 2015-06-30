@@ -168,6 +168,7 @@ class Stabilizer
   RTC::TimedDoubleSeq m_qRef;
   RTC::TimedDoubleSeq m_tau;
   RTC::TimedOrientation3D m_rpy;
+  RTC::TimedDoubleSeq m_localEEpos;
   // RTC::TimedDoubleSeq m_forceR, m_forceL;
   RTC::TimedDoubleSeq m_force[2];
   RTC::TimedPoint3D m_zmpRef;
@@ -198,7 +199,7 @@ class Stabilizer
   RTC::InPort<RTC::TimedOrientation3D> m_baseRpyIn;
   RTC::InPort<RTC::TimedBooleanSeq> m_contactStatesIn;
   RTC::InPort<RTC::TimedDoubleSeq> m_controlSwingSupportTimeIn;
-  
+  RTC::InPort<RTC::TimedDoubleSeq> m_localEEposIn;
   // </rtc-template>
 
   // DataOutPort declaration

@@ -295,6 +295,8 @@ class Stabilizer
 
   // ogawa
   void setEefmParameters();
+  void setEndLinkName();
+  string end_link_name[LINKNUM];
 };
 
 

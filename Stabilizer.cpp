@@ -141,8 +141,8 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   
   // </rtc-template>
   RTC::Properties& prop = getProperties();
-  coil::stringTo(dt, prop["dt"].c_str());
-  dt = 0.0025;
+  //coil::stringTo(dt, prop["dt"].c_str());
+  coil::stringTo(dt, prop["Stabilizer.dt"].c_str());
 
   // parameters for corba
   /*
@@ -278,7 +278,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
 
   // ogawa
   setEefmParameters();
-
+  setEndLinkName();
 
   // parameters for RUNST
   {
@@ -406,12 +406,6 @@ RTC::ReturnCode_t Stabilizer::onDeactivated(RTC::UniqueId ec_id)
 #define DEBUGP2 (loop%10==0)
 RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
 {
-  step_counter+=1;
-  step_counter=step_counter%m_nStep;
-  if(step_counter!=0)
-    return RTC::RTC_OK;
-
-
   loop++;
   //std::cout<< transition_smooth_gain<<std::endl;
   // std::cout << m_profile.instance_name<< ": onExecute(" << ec_id << ")" << std::endl;
@@ -455,6 +449,13 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
   if (m_controlSwingSupportTimeIn.isNew()){
     m_controlSwingSupportTimeIn.read();
   }
+
+
+  step_counter+=1;
+  step_counter=step_counter%m_nStep;
+  if(step_counter!=0)
+    return RTC::RTC_OK;
+
 
   if (is_legged_robot) {
     getCurrentParameters();
@@ -641,15 +642,15 @@ void Stabilizer::getActualParameters ()
   rel_act_zmp = m_robot->rootLink()->R().transpose() * (act_zmp - m_robot->rootLink()->p());
   
   if (st_algorithm == OpenHRP::StabilizerService::EEFM) {
-    // Actual foot_origin frame =>
+    // Acctual foot_origin frame =>
     act_zmp = foot_origin_rot.transpose() * (act_zmp - foot_origin_pos);
     act_cog = foot_origin_rot.transpose() * (act_cog - foot_origin_pos);
     //act_cogvel = foot_origin_rot.transpose() * act_cogvel;
-    if (contact_states != prev_contact_states) {
+     if (contact_states != prev_contact_states) {
       act_cogvel = (foot_origin_rot.transpose() * prev_act_foot_origin_rot) * act_cogvel;
-    } else {
+     } else {
       act_cogvel = (act_cog - prev_act_cog)/dt;
-    }
+     }
     prev_act_foot_origin_rot = foot_origin_rot;
     double const_param = 2 * M_PI * eefm_cogvel_cutoff_freq * dt;
     act_cogvel = 1.0/(1+const_param) * prev_act_cogvel + const_param/(1+const_param) * act_cogvel;
@@ -1154,7 +1155,7 @@ void Stabilizer::calcEEForceMomentControl() {
       
       //wutest rotate waist, keep foot and CoM in the same place
       m_robot->calcForwardKinematics();
-      if(!CalcIVK_biped(m_robot, current_root_R, m_contactStates))
+      if(!CalcIVK_biped(m_robot, current_root_R, m_contactStates, end_link_name))
 	std::cout<<"InverseKinametic bipped error"<<std::endl;
 
 
@@ -1841,7 +1842,23 @@ void Stabilizer::setEefmParameters()
   prev_act_cogvel = Vector3::Zero();
   prev_ref_cog    = Vector3::Zero();
   prev_ref_zmp    = Vector3::Zero();
+  prev_act_foot_origin_rot = Matrix3::Identity();
   prev_ref_foot_origin_rot = Matrix3::Identity();
+}
+
+
+void Stabilizer::setEndLinkName()
+{
+  RTC::Properties& prop = getProperties();
+  
+  end_link_name[RLEG]=prop["RLEG_END"];
+  end_link_name[LLEG]=prop["LLEG_END"];
+  end_link_name[RARM]=prop["RARM_END"];
+  end_link_name[LARM]=prop["LARM_END"];
+  end_link_name[WAIST]=prop["BASE_LINK"];
+  std::cout << "st : end link name" << std::endl;
+  for(int i=0; i<LINKNUM; i++)
+    std::cout << "  " << end_link_name[i] << std::endl;
 }
 
 

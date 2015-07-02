@@ -25,7 +25,8 @@ void RenewModel(BodyPtr body,Vector3  *p_now, Matrix3 *R_now)
   R_now[4]=body->link("WAIST")->R();
 }
 
-bool CalcIVK_biped(BodyPtr body,  Matrix3 ref_root_R, TimedBooleanSeq m_contactStates)
+//bool CalcIVK_biped(BodyPtr body,  Matrix3 ref_root_R, TimedBooleanSeq m_contactStates)
+bool CalcIVK_biped(BodyPtr body,  Matrix3 ref_root_R, TimedBooleanSeq m_contactStates, string *end_link_name)
 {
   Link* SupLeg;
   Link* SwLeg;
@@ -47,19 +48,24 @@ bool CalcIVK_biped(BodyPtr body,  Matrix3 ref_root_R, TimedBooleanSeq m_contactS
   MatrixXd Jacobian=MatrixXd::Zero(12,12);//leg only
  
   if((FT==FSRFsw)||FT==RFsw){
-    SupLeg=body->link("LLEG_JOINT5");
-    SwLeg=body->link("RLEG_JOINT5");
+    //SupLeg=body->link("LLEG_JOINT5");
+    //SwLeg=body->link("RLEG_JOINT5");
+    SupLeg=body->link(end_link_name[LLEG]);
+    SwLeg=body->link(end_link_name[RLEG]);
   }
   else if((FT==FSLFsw)||FT==LFsw){
-    SupLeg=body->link("RLEG_JOINT5");
-    SwLeg=body->link("LLEG_JOINT5");
+    //SupLeg=body->link("RLEG_JOINT5");
+    //SwLeg=body->link("LLEG_JOINT5");
+    SupLeg=body->link(end_link_name[RLEG]);
+    SwLeg=body->link(end_link_name[LLEG]);
   }
   ref_SwLeg_p=SwLeg->p(); 
   ref_SwLeg_R=SwLeg->R(); 
   ref_SupLeg_p=SupLeg->p(); 
   ref_SupLeg_R=SupLeg->R(); 
   SupLeg2SwLeg= getCustomJointPath(body, SupLeg, SwLeg);  
-  SupLeg2W= getCustomJointPath(body, SupLeg,body->link("WAIST"));   
+  //SupLeg2W= getCustomJointPath(body, SupLeg,body->link("WAIST"));   
+  SupLeg2W= getCustomJointPath(body, SupLeg,body->link(end_link_name[WAIST]));
   
   static const int MAX_IK_ITERATION = 50;
   static const double LAMBDA = 0.9;
@@ -81,10 +87,10 @@ bool CalcIVK_biped(BodyPtr body,  Matrix3 ref_root_R, TimedBooleanSeq m_contactS
   
     for(int i=0; i < MAX_IK_ITERATION; i++){
       
-      Matrix3 W_R=body->link("WAIST")->R();
+      Matrix3 W_R=body->link(end_link_name[WAIST])->R();
       Vector3 SwLeg_p = SwLeg->p();
       Matrix3 SwLeg_R = SwLeg->R();
-      CalJo_biped(body, FT, Jacobian);        
+      CalJo_biped(body, FT, Jacobian, end_link_name);        
       
       Vector3 CM_dp=cm - body->calcCenterOfMass();
       Vector3 W_omega=W_R* omegaFromRot(W_R.transpose() * ref_root_R);
@@ -138,7 +144,8 @@ bool CalcIVK_biped(BodyPtr body,  Matrix3 ref_root_R, TimedBooleanSeq m_contactS
 
 
 //////ivk_jacobian/////////
-void CalJo_biped(BodyPtr body, FootType FT, Eigen::MatrixXd& out_J)
+//void CalJo_biped(BodyPtr body, FootType FT, Eigen::MatrixXd& out_J)
+void CalJo_biped(BodyPtr body, FootType FT, Eigen::MatrixXd& out_J, string *end_link_name)
 { 
   Link* SupLeg;
   Link* SwLeg;
@@ -147,15 +154,20 @@ void CalJo_biped(BodyPtr body, FootType FT, Eigen::MatrixXd& out_J)
 
   
   if((FT==FSRFsw)||FT==RFsw){
-    SupLeg=body->link("LLEG_JOINT5");
-    SwLeg=body->link("RLEG_JOINT5");
+    //SupLeg=body->link("LLEG_JOINT5");
+    //SwLeg=body->link("RLEG_JOINT5");
+    SupLeg=body->link(end_link_name[LLEG]);
+    SwLeg=body->link(end_link_name[RLEG]);
   }
   else if((FT==FSLFsw)||FT==LFsw){
-    SupLeg=body->link("RLEG_JOINT5");
-    SwLeg=body->link("LLEG_JOINT5");
+    //SupLeg=body->link("RLEG_JOINT5");
+    //SwLeg=body->link("LLEG_JOINT5");
+    SupLeg=body->link(end_link_name[RLEG]);
+    SwLeg=body->link(end_link_name[LLEG]);
   }
   SupLeg2SwLeg= getCustomJointPath(body, SupLeg, SwLeg);  
-  SupLeg2W= getCustomJointPath(body, SupLeg,body->link("WAIST"));   
+  //SupLeg2W= getCustomJointPath(body, SupLeg,body->link("WAIST"));   
+  SupLeg2W= getCustomJointPath(body, SupLeg,body->link(end_link_name[WAIST]));
 
   body->calcCenterOfMass();
   calcCMJacobian(body, SupLeg, Jcom);

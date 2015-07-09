@@ -145,6 +145,12 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   RTC::Properties& prop = getProperties();
   coil::stringTo(dt, prop["Stabilizer.dt"].c_str());
 
+  end_link[RLEG]=prop["RLEG_END"];
+  end_link[LLEG]=prop["LLEG_END"];
+  end_link[RARM]=prop["RARM_END"];
+  end_link[LARM]=prop["LARM_END"];
+  end_link[WAIST]=prop["BASE_LINK"];
+
   // parameters for corba
   /*
   RTC::Manager& rtcManager = RTC::Manager::instance();
@@ -168,7 +174,10 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   cnoid::BodyLoader bl;
   m_robot=bl.load( prop["model"].c_str());
   std::cout<<"ST dof robot "<<m_robot->numJoints()<<std::endl;
-  m_robot->rootLink()->p()<<0.0, 0.0, 0.705;
+  coil::stringTo(m_waist_height, prop["waist_height"].c_str());
+  std::cout<<"sony waist_height "<<m_waist_height<<std::endl;
+  m_robot->rootLink()->p()<<0.0, 0.0, m_waist_height;
+
   //std::cout<<"R "<<m_robot->rootLink()->name()<<std::endl;
   m_robot->calcForwardKinematics();
   m_robot->calcCenterOfMass();
@@ -225,26 +234,26 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
     //eefm_k1[i] =-1.2310124;
     //eefm_k2[i] =-0.3577664;
     //eefm_k3[i] =-0.2223669;
-    //when Tc=0.05 pole -13 -3 -wc
+    //when Tc=0.05 pole -13 -3 -wc wrong but ok
     eefm_k1[i] =-1.2310124;
     eefm_k2[i] =-0.3577664;
     eefm_k3[i] =-0.0223669;
+    // jvrc
 
-   
     //org
     eefm_body_attitude_control_gain[i] = 1.0;
     eefm_body_attitude_control_time_const[i] = 1e5;
   }
  
   //org gain
-  eefm_pos_damping_gain = 3500;
-  //eefm_rot_damping_gain = 20*5;
+  //eefm_pos_damping_gain = 3500;
+  ////eefm_rot_damping_gain = 20*5;
   eefm_rot_time_const = 1;
   eefm_pos_time_const_support = 1;
   eefm_pos_time_const_swing = 0.04;
   eefm_pos_transition_time = 0.02;
   eefm_pos_margin_time = 0.02;
-  eefm_zmp_delay_time_const[0] = eefm_zmp_delay_time_const[1] = 0.04;
+  eefm_zmp_delay_time_const[0] = eefm_zmp_delay_time_const[1] = 0.04;//org 0.04
 
 
   //wutest gain
@@ -311,7 +320,8 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   if (is_legged_robot) {
     //zmp_origin_off = ee_map[m_robot->sensor<hrp::ForceSensor>(sensor_names[0])->link->name()].localp(2);
     //no needed. calculated in getTarget
-    zmp_origin_off = ee_map["RLEG_JOINT5"].localp(2); 
+    //zmp_origin_off = ee_map["RLEG_JOINT5"].localp(2); 
+    zmp_origin_off = ee_map[ end_effectors_str[1] ].localp(2);
   }
   //total_mass = m_robot->totalMass();
   total_mass = m_robot->mass();

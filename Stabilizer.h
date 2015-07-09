@@ -293,6 +293,9 @@ class Stabilizer
   double force_dz_offset;
   Vector3 dzmp;
   Vector3 wzmp;
+
+  string end_link[LINKNUM];
+  double m_waist_height;
 };
 
 

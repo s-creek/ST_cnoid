@@ -17,6 +17,7 @@
 #include <rtm/DataOutPort.h>
 #include <rtm/idl/BasicDataTypeSkel.h>
 #include <rtm/idl/ExtendedDataTypesSkel.h>
+#include "VectorConvert.h"
 //#include <hrpModel/Body.h>
 
 #include <cnoid/Body>
@@ -296,6 +297,9 @@ class Stabilizer
 
   string end_link[LINKNUM];
   double m_waist_height;
+
+  //ogawa
+  void setEefmParameters();
 };
 
 

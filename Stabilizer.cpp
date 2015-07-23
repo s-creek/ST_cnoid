@@ -222,7 +222,8 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
     k_brot_p[i] = 0.1;
     k_brot_tc[i] = 1.5;
   }
-  // parameters for EEFM
+  // parameters for EEFM///////////////////////////
+  /*  
   double k_ratio = 0.9;
   for (int i = 0; i < 2; i++) {
     //eefm_k1[i] = -1.41429*k_ratio;
@@ -231,30 +232,23 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
 
     //calc by wu
     //when Tc=0.04
-    //eefm_k1[i] =-1.2310124;
-    //eefm_k2[i] =-0.3577664;
-    //eefm_k3[i] =-0.2223669;
-    //when Tc=0.05 pole -13 -3 -wc wrong but ok
     eefm_k1[i] =-1.2310124;
     eefm_k2[i] =-0.3577664;
-    eefm_k3[i] =-0.0223669;
+    eefm_k3[i] =-0.2223669;
     // jvrc
 
     //org
-    eefm_body_attitude_control_gain[i] = 1.0;
-    eefm_body_attitude_control_time_const[i] = 1e5;
+    //eefm_body_attitude_control_gain[i] = 1.0;
+    //eefm_body_attitude_control_time_const[i] = 1e5;
   }
- 
+  
   //org gain
-  //eefm_pos_damping_gain = 3500;
-  ////eefm_rot_damping_gain = 20*5;
-  eefm_rot_time_const = 1;
-  eefm_pos_time_const_support = 1;
+  //eefm_rot_time_const = 1;
+  //eefm_pos_time_const_support = 1;
   eefm_pos_time_const_swing = 0.04;
-  eefm_pos_transition_time = 0.02;
-  eefm_pos_margin_time = 0.02;
+  eefm_pos_transition_time = 0.02;//unuse
+  eefm_pos_margin_time = 0.02;//unuse
   eefm_zmp_delay_time_const[0] = eefm_zmp_delay_time_const[1] = 0.04;//org 0.04
-
 
   //wutest gain
   eefm_pos_damping_gain = 2*1e5;
@@ -268,16 +262,19 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
     //eefm_body_attitude_control_gain[i] = 1.3;
     eefm_body_attitude_control_time_const[i] = 0.003;
   }
-  eefm_pos_control_switch=eefm_rot_control_switch=eefm_att_control_switch=1;
-  //eefm_leg_inside_margin = 0.065; // [m]
-  //eefm_leg_front_margin = 0.05;
-  //eefm_leg_rear_margin = 0.05;
+  
+  eefm_cogvel_cutoff_freq = 35.3678; //[Hz]
   //for hrp2
   eefm_leg_inside_margin = 0.055; // [m]
   eefm_leg_front_margin = 0.13;
   eefm_leg_rear_margin = 0.1;
+  ////////////////////////////////////////////////////////////////
+  */
+  eefm_pos_control_switch=eefm_rot_control_switch=eefm_att_control_switch=1;
 
-  eefm_cogvel_cutoff_freq = 35.3678; //[Hz]
+
+  //ogawa
+  setEefmParameters();
 
   // parameters for RUNST
   {
@@ -357,7 +354,8 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   step_counter=0;
   coil::stringTo(m_nStep, prop["wutest.nStep"].c_str());
   //force_dz_offset=40.824;
-  force_dz_offset=40.7735;
+   coil::stringTo(force_dz_offset, prop["force_dz_offset"].c_str());
+   //force_dz_offset=40.7735;
 
   return RTC::RTC_OK;
 }
@@ -1156,7 +1154,7 @@ void Stabilizer::calcEEForceMomentControl() {
       
       //wutest rotate waist, keep foot and CoM in the same place
       m_robot->calcForwardKinematics();
-      if(!CalcIVK_biped(m_robot, current_root_R, m_contactStates))
+      if(!CalcIVK_biped(m_robot, current_root_R, m_contactStates, end_link))
 	std::cout<<"InverseKinametic bipped error"<<std::endl;
 
 
@@ -1763,6 +1761,80 @@ void Stabilizer::calcTorque ()
   // }
 };
 */
+
+void Stabilizer::setEefmParameters()
+{
+  eefm_pos_control_switch=eefm_rot_control_switch=eefm_att_control_switch=1;
+  //ref_zmp_aux = Vector3::Zero();
+
+
+  RTC::Properties& prop = getProperties();
+
+  std::vector<double> prop_eefm_k;
+  coil::stringTo(prop_eefm_k, prop["eefm_k"].c_str());
+  eefm_k1[0] = eefm_k1[1] = prop_eefm_k[0];
+  eefm_k2[0] = eefm_k2[1] = prop_eefm_k[1];
+  eefm_k3[0] = eefm_k3[1] = prop_eefm_k[2];
+ 
+  double prop_eefm_zmp;
+  coil::stringTo(prop_eefm_zmp, prop["eefm_zmp"].c_str());
+  eefm_zmp_delay_time_const[0] = eefm_zmp_delay_time_const[1] = prop_eefm_zmp;
+
+  std::vector<double> prop_eefm_rot;
+  coil::stringTo(prop_eefm_rot, prop["eefm_rot"].c_str());
+  eefm_rot_damping_gain[0] = prop_eefm_rot[0];
+  eefm_rot_damping_gain[1] = prop_eefm_rot[1];
+  eefm_rot_time_const      = prop_eefm_rot[2];
+
+  std::vector<double> prop_eefm_pos;
+  coil::stringTo(prop_eefm_pos, prop["eefm_pos"].c_str());
+  eefm_pos_damping_gain       = prop_eefm_pos[0];
+  eefm_pos_time_const_support = prop_eefm_pos[1];
+  eefm_pos_time_const_swing   = prop_eefm_pos[2];
+  eefm_pos_transition_time    = prop_eefm_pos[3];//unused
+  eefm_pos_margin_time        = prop_eefm_pos[4];//unused
+
+  std::vector<double> prop_eefm_leg;
+  coil::stringTo(prop_eefm_leg, prop["eefm_leg"].c_str());
+  eefm_leg_inside_margin = prop_eefm_leg[0];
+  eefm_leg_front_margin  = prop_eefm_leg[1];
+  eefm_leg_rear_margin   = prop_eefm_leg[2];
+
+  std::vector<double> prop_eefm_body;
+  coil::stringTo(prop_eefm_body, prop["eefm_body"].c_str());
+  eefm_body_attitude_control_gain[0] = eefm_body_attitude_control_gain[1] = prop_eefm_body[0];
+  eefm_body_attitude_control_time_const[0] = eefm_body_attitude_control_time_const[1] = prop_eefm_body[1];
+
+  coil::stringTo(eefm_cogvel_cutoff_freq, prop["eefm_cog"].c_str());
+
+
+  std::cout << "Stabilizer EEFM parameters" << std::endl
+	    << "eefm zmp :" << std::endl 
+	    << "  delay zmp = " << eefm_zmp_delay_time_const[0] << ", " << eefm_zmp_delay_time_const[1] << std::endl
+	    << "eefm k :" << std::endl 
+	    << "  k gain = " << eefm_k1[0] << ", " << eefm_k2[0] << ", " << eefm_k3[0] << std::endl 
+	    << "eefm rot :" << std::endl
+	    << "  damp gain = " << eefm_rot_damping_gain[0] << ", " << eefm_rot_damping_gain[1] << std::endl
+	    << "  time const = " << eefm_rot_time_const << std::endl
+	    << "eefm pos :" << std::endl
+	    << "  damp gain = " << eefm_pos_damping_gain << std::endl
+	    << "  time const sup = " << eefm_pos_time_const_support << std::endl
+	    << "  time const swg = " << eefm_pos_time_const_swing << std::endl
+	    << "  transition time = " << eefm_pos_transition_time << std::endl
+	    << "  margin time = " << eefm_pos_margin_time << std::endl
+	    << "eefm leg :" << std::endl
+	    << "  inside = " << eefm_leg_inside_margin << std::endl
+	    << "  front = " << eefm_leg_front_margin << std::endl
+	    << "  rear = " << eefm_leg_rear_margin << std::endl
+	    << "eefm body :" << std::endl
+	    << "  gain = " << eefm_body_attitude_control_gain[0] << std::endl
+	    << "  time const = " << eefm_body_attitude_control_time_const[0] << std::endl
+	    << "eefm cog : " << std::endl
+	    << "  cutoff freq = " << eefm_cogvel_cutoff_freq << std::endl
+	    << std::endl;
+}
+
+
 extern "C"
 {
 

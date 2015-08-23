@@ -175,8 +175,8 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   m_robot=bl.load( prop["model"].c_str());
   std::cout<<"ST dof robot "<<m_robot->numJoints()<<std::endl;
   coil::stringTo(m_waist_height, prop["waist_height"].c_str());
-  std::cout<<"sony waist_height "<<m_waist_height<<std::endl;
-  m_robot->rootLink()->p()<<0.0, 0.0, m_waist_height;
+  //std::cout<<"sony waist_height "<<m_waist_height<<std::endl;
+  //m_robot->rootLink()->p()<<0.0, 0.0, m_waist_height;
 
   //std::cout<<"R "<<m_robot->rootLink()->name()<<std::endl;
   m_robot->calcForwardKinematics();
@@ -452,6 +452,10 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
   if (m_controlSwingSupportTimeIn.isNew()){
     m_controlSwingSupportTimeIn.read();
   }
+
+  //ofs<<m_force[0].data[2]<<" "<<m_force[1].data[2]<<endl;
+  
+
   /*
   if(m_localEEposIn.isNew()){
     m_localEEposIn.read();
@@ -1039,6 +1043,7 @@ bool Stabilizer::calcZMP(Vector3& ret_zmp, const double zmp_z)
   double tmpzmpx = 0;
   double tmpzmpy = 0;
   double tmpfz = 0, tmpfz2 = 0.0;
+  double pre_act_force_zORG[2];
   for (size_t i = 0; i < 2; i++) {
     //hrp::ForceSensor* sensor = m_robot->sensor<hrp::ForceSensor>(sensor_names[i]);
     ForceSensor* sensor=forceSensors[i];
@@ -1051,9 +1056,23 @@ bool Stabilizer::calcZMP(Vector3& ret_zmp, const double zmp_z)
     tmpzmpx += nf(2) * fsp(0) - (fsp(2) - zmp_z) * nf(0) - nm(1);
     tmpzmpy += nf(2) * fsp(1) - (fsp(2) - zmp_z) * nf(1) + nm(0);
     tmpfz += nf(2);
+    //wu
+    pre_act_force_zORG[i] = prev_act_force_z[i];
     prev_act_force_z[i] = 0.85 * prev_act_force_z[i] + 0.15 * nf(2); // filter, cut off 5[Hz]
   }
   tmpfz2 = prev_act_force_z[0] + prev_act_force_z[1];
+
+  //wu
+  if (tmpfz2 < 50) {
+    prev_act_force_z[0] =  pre_act_force_zORG[0];
+    prev_act_force_z[1] =  pre_act_force_zORG[1];
+    tmpfz2 = prev_act_force_z[0] + prev_act_force_z[1];
+  } 
+  ret_zmp = Vector3(tmpzmpx / tmpfz, tmpzmpy / tmpfz, zmp_z);
+  return true; // on ground
+  
+
+  /*
   if (tmpfz2 < 50) {
     ret_zmp = act_zmp;
     return false; // in the air
@@ -1061,6 +1080,7 @@ bool Stabilizer::calcZMP(Vector3& ret_zmp, const double zmp_z)
     ret_zmp = Vector3(tmpzmpx / tmpfz, tmpzmpy / tmpfz, zmp_z);
     return true; // on ground
   }
+  */
 };
 
 /*

@@ -442,7 +442,7 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       ///wutest///
       ForceSensor* sensor=forceSensors[i];
       Vector3 sensor_force = (sensor->link()->R() * sensor->R_local()) * Vector3(m_force[i].data[0], m_force[i].data[1], m_force[i].data[2]);
-      if(m_contactStates.data[i]==0 && sensor_force[2]>100 )
+      if(m_contactStates.data[i]==0 && sensor_force[2]>100 && true)
 	contact_states[i]=1;
       ///////////
     }
@@ -986,7 +986,8 @@ void Stabilizer::getTargetParameters ()
     Vector3 tmp_ref_zmp=ref_zmp + eefm_zmp_delay_time_const[0] * (ref_zmp - prev_ref_zmp)/ dt;
    
     //wutest with out inverse system
-    tmp_ref_zmp = ref_zmp;
+    // commentout by ogawa
+    //tmp_ref_zmp = ref_zmp;
 
     prev_ref_zmp = ref_zmp;
     ref_zmp = tmp_ref_zmp;

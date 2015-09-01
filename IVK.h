@@ -35,12 +35,10 @@ using namespace Eigen;
 enum FootType {FSRFsw, FSLFsw, RFsw, LFsw};
 enum{RLEG, LLEG, RARM, LARM, WAIST, LINKNUM};
 
-void RenewModel(BodyPtr body,Vector3  *p_now, Matrix3 *R_now);
+void RenewModel(BodyPtr body,Vector3  *p_now, Matrix3 *R_now, string *end_link);
 
-//bool CalcIVK_biped(BodyPtr body,  Matrix3 ref_root_R, TimedBooleanSeq m_contactStates);
-//void CalJo_biped(BodyPtr body, FootType FT, Eigen::MatrixXd& out_J);
-bool CalcIVK_biped(BodyPtr body,  Matrix3 ref_root_R, TimedBooleanSeq m_contactStates, string *end_link_name);
-void CalJo_biped(BodyPtr body, FootType FT, Eigen::MatrixXd& out_J, string *end_link_name);
+bool CalcIVK_biped(BodyPtr body,  Matrix3 ref_root_R, TimedBooleanSeq m_contactStates, string *end_link);
+void CalJo_biped(BodyPtr body, FootType FT, Eigen::MatrixXd& out_J, string *end_link);
 
 
 #endif

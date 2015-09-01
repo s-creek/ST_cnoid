@@ -71,5 +71,6 @@ endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ggdb3 -fno-schedule-insns -fno-schedule-insns2 -fno-strict-aliasing")
 
+
 install(TARGETS ${comp_name} LIBRARY DESTINATION rtc CONFIGURATIONS)
 #install(FILES connect.conf DESTINATION rtc)

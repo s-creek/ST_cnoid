@@ -17,6 +17,7 @@
 #include <rtm/DataOutPort.h>
 #include <rtm/idl/BasicDataTypeSkel.h>
 #include <rtm/idl/ExtendedDataTypesSkel.h>
+#include "VectorConvert.h"
 //#include <hrpModel/Body.h>
 
 #include <cnoid/Body>
@@ -168,6 +169,7 @@ class Stabilizer
   RTC::TimedDoubleSeq m_qRef;
   RTC::TimedDoubleSeq m_tau;
   RTC::TimedOrientation3D m_rpy;
+  RTC::TimedDoubleSeq m_localEEpos;
   // RTC::TimedDoubleSeq m_forceR, m_forceL;
   RTC::TimedDoubleSeq m_force[2];
   RTC::TimedPoint3D m_zmpRef;
@@ -198,7 +200,7 @@ class Stabilizer
   RTC::InPort<RTC::TimedOrientation3D> m_baseRpyIn;
   RTC::InPort<RTC::TimedBooleanSeq> m_contactStatesIn;
   RTC::InPort<RTC::TimedDoubleSeq> m_controlSwingSupportTimeIn;
-  
+  RTC::InPort<RTC::TimedDoubleSeq> m_localEEposIn;
   // </rtc-template>
 
   // DataOutPort declaration
@@ -293,10 +295,11 @@ class Stabilizer
   Vector3 dzmp;
   Vector3 wzmp;
 
-  // ogawa
+  string end_link[LINKNUM];
+  double m_waist_height;
+
+  //ogawa
   void setEefmParameters();
-  void setEndLinkName();
-  string end_link_name[LINKNUM];
 };
 
 

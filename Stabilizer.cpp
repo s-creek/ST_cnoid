@@ -56,6 +56,7 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_baseRpyIn("baseRpyIn", m_baseRpy),
     m_contactStatesIn("contactStates", m_contactStates),
     m_controlSwingSupportTimeIn("controlSwingSupportTime", m_controlSwingSupportTime),
+    m_localEEposIn("localEEpos", m_localEEpos),
     m_qRefOut("q", m_qRef),
     m_tauOut("tau", m_tau),
     m_zmpOut("zmp", m_zmp),
@@ -109,6 +110,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addInPort("baseRpyIn", m_baseRpyIn);
   addInPort("contactStates", m_contactStatesIn);
   addInPort("controlSwingSupportTime", m_controlSwingSupportTimeIn);
+  addInPort("localEEpos",m_localEEposIn);
 
   // Set OutPort buffer
   addOutPort("q", m_qRefOut);
@@ -141,8 +143,13 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   
   // </rtc-template>
   RTC::Properties& prop = getProperties();
-  //coil::stringTo(dt, prop["dt"].c_str());
   coil::stringTo(dt, prop["Stabilizer.dt"].c_str());
+
+  end_link[RLEG]=prop["RLEG_END"];
+  end_link[LLEG]=prop["LLEG_END"];
+  end_link[RARM]=prop["RARM_END"];
+  end_link[LARM]=prop["LARM_END"];
+  end_link[WAIST]=prop["BASE_LINK"];
 
   // parameters for corba
   /*
@@ -168,14 +175,11 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   cnoid::BodyLoader bl;
   m_robot=bl.load( prop["model"].c_str());
   std::cout<<"ST dof robot "<<m_robot->numJoints()<<std::endl;
-  //m_robot->rootLink()->p()<<0.0, 0.0, 0.705;
+  coil::stringTo(m_waist_height, prop["waist_height"].c_str());
+  //std::cout<<"sony waist_height "<<m_waist_height<<std::endl;
+  //m_robot->rootLink()->p()<<0.0, 0.0, m_waist_height;
 
-  // ogawa
-  double init_waist_height;
-  coil::stringTo(init_waist_height, prop["waist_height"].c_str());
-  m_robot->rootLink()->p() << 0, 0, init_waist_height;
-  std::cout << "waist height = " << init_waist_height << std::endl;
-  
+
   //std::cout<<"R "<<m_robot->rootLink()->name()<<std::endl;
   m_robot->calcForwardKinematics();
   m_robot->calcCenterOfMass();
@@ -210,6 +214,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
     }
     m_contactStates.data.length(num);
   }
+ 
 
 
   // parameters for TPCC
@@ -220,7 +225,8 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
     k_brot_p[i] = 0.1;
     k_brot_tc[i] = 1.5;
   }
-  // parameters for EEFM
+  // parameters for EEFM///////////////////////////
+  /*  
   double k_ratio = 0.9;
   for (int i = 0; i < 2; i++) {
     //eefm_k1[i] = -1.41429*k_ratio;
@@ -229,29 +235,23 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
 
     //calc by wu
     //when Tc=0.04
-    //eefm_k1[i] =-1.2310124;
-    //eefm_k2[i] =-0.3577664;
-    //eefm_k3[i] =-0.2223669;
-    //when Tc=0.05
     eefm_k1[i] =-1.2310124;
     eefm_k2[i] =-0.3577664;
-    eefm_k3[i] =-0.0223669;
+    eefm_k3[i] =-0.2223669;
+    // jvrc
 
     //org
-    eefm_body_attitude_control_gain[i] = 1.0;
-    eefm_body_attitude_control_time_const[i] = 1e5;
+    //eefm_body_attitude_control_gain[i] = 1.0;
+    //eefm_body_attitude_control_time_const[i] = 1e5;
   }
- 
+  
   //org gain
-  eefm_pos_damping_gain = 3500;
-  //eefm_rot_damping_gain = 20*5;
-  eefm_rot_time_const = 1;
-  eefm_pos_time_const_support = 1;
+  //eefm_rot_time_const = 1;
+  //eefm_pos_time_const_support = 1;
   eefm_pos_time_const_swing = 0.04;
-  eefm_pos_transition_time = 0.02;
-  eefm_pos_margin_time = 0.02;
-  eefm_zmp_delay_time_const[0] = eefm_zmp_delay_time_const[1] = 0.04;
-
+  eefm_pos_transition_time = 0.02;//unuse
+  eefm_pos_margin_time = 0.02;//unuse
+  eefm_zmp_delay_time_const[0] = eefm_zmp_delay_time_const[1] = 0.04;//org 0.04
 
   //wutest gain
   eefm_pos_damping_gain = 2*1e5;
@@ -265,20 +265,20 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
     //eefm_body_attitude_control_gain[i] = 1.3;
     eefm_body_attitude_control_time_const[i] = 0.003;
   }
-  eefm_pos_control_switch=eefm_rot_control_switch=eefm_att_control_switch=1;
-  //eefm_leg_inside_margin = 0.065; // [m]
-  //eefm_leg_front_margin = 0.05;
-  //eefm_leg_rear_margin = 0.05;
+  
+  eefm_cogvel_cutoff_freq = 35.3678; //[Hz]
   //for hrp2
   eefm_leg_inside_margin = 0.055; // [m]
   eefm_leg_front_margin = 0.13;
   eefm_leg_rear_margin = 0.1;
+  ////////////////////////////////////////////////////////////////
+  */
+  eefm_pos_control_switch=eefm_rot_control_switch=eefm_att_control_switch=1;
 
-  eefm_cogvel_cutoff_freq = 35.3678; //[Hz]
 
-  // ogawa
+  //ogawa
   setEefmParameters();
-  setEndLinkName();
+
 
   // parameters for RUNST
   {
@@ -322,7 +322,6 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
     //zmp_origin_off = ee_map[m_robot->sensor<hrp::ForceSensor>(sensor_names[0])->link->name()].localp(2);
     //no needed. calculated in getTarget
     //zmp_origin_off = ee_map["RLEG_JOINT5"].localp(2); 
-    // ogawa
     zmp_origin_off = ee_map[ end_effectors_str[1] ].localp(2);
   }
   //total_mass = m_robot->totalMass();
@@ -359,7 +358,8 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   step_counter=0;
   coil::stringTo(m_nStep, prop["wutest.nStep"].c_str());
   //force_dz_offset=40.824;
-  force_dz_offset=0.0;
+   coil::stringTo(force_dz_offset, prop["force_dz_offset"].c_str());
+   //force_dz_offset=40.7735;
 
   return RTC::RTC_OK;
 }
@@ -456,6 +456,7 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
   step_counter=step_counter%m_nStep;
   if(step_counter!=0)
     return RTC::RTC_OK;
+
 
 
   if (is_legged_robot) {
@@ -1037,6 +1038,7 @@ bool Stabilizer::calcZMP(Vector3& ret_zmp, const double zmp_z)
   double tmpzmpx = 0;
   double tmpzmpy = 0;
   double tmpfz = 0, tmpfz2 = 0.0;
+  double pre_act_force_zORG[2];
   for (size_t i = 0; i < 2; i++) {
     //hrp::ForceSensor* sensor = m_robot->sensor<hrp::ForceSensor>(sensor_names[i]);
     ForceSensor* sensor=forceSensors[i];
@@ -1049,9 +1051,23 @@ bool Stabilizer::calcZMP(Vector3& ret_zmp, const double zmp_z)
     tmpzmpx += nf(2) * fsp(0) - (fsp(2) - zmp_z) * nf(0) - nm(1);
     tmpzmpy += nf(2) * fsp(1) - (fsp(2) - zmp_z) * nf(1) + nm(0);
     tmpfz += nf(2);
+    //wu
+    pre_act_force_zORG[i] = prev_act_force_z[i];
     prev_act_force_z[i] = 0.85 * prev_act_force_z[i] + 0.15 * nf(2); // filter, cut off 5[Hz]
   }
   tmpfz2 = prev_act_force_z[0] + prev_act_force_z[1];
+
+  //wu
+  if (tmpfz2 < 50) {
+    prev_act_force_z[0] =  pre_act_force_zORG[0];
+    prev_act_force_z[1] =  pre_act_force_zORG[1];
+    tmpfz2 = prev_act_force_z[0] + prev_act_force_z[1];
+  } 
+  ret_zmp = Vector3(tmpzmpx / tmpfz, tmpzmpy / tmpfz, zmp_z);
+  return true; // on ground
+  
+
+  /*
   if (tmpfz2 < 50) {
     ret_zmp = act_zmp;
     return false; // in the air
@@ -1059,6 +1075,7 @@ bool Stabilizer::calcZMP(Vector3& ret_zmp, const double zmp_z)
     ret_zmp = Vector3(tmpzmpx / tmpfz, tmpzmpy / tmpfz, zmp_z);
     return true; // on ground
   }
+  */
 };
 
 /*
@@ -1141,19 +1158,22 @@ void Stabilizer::calcEEForceMomentControl() {
       }
      
       //rpy control
+      //std::cout << "st : attitude = " << d_rpy[0] << "   " << d_rpy[1] << std::endl;
       rats::rotm3times(current_root_R, target_root_R, rotFromRpy(d_rpy[0], d_rpy[1], 0));
+      //rats::rotm3times(current_root_R, current_root_R, rotFromRpy(d_rpy[0], d_rpy[1], 0));
+      
      
       //org
-      //m_robot->rootLink()->R() = current_root_R;
-      //m_robot->rootLink()->p() = target_root_p + target_root_R * rel_cog - current_root_R * rel_cog;
-      //m_robot->calcForwardKinematics();
-      //current_base_rpy = rot2rpy(m_robot->rootLink()->R());//for log
-      //current_base_pos = m_robot->rootLink()->p();//for log
+      // m_robot->rootLink()->R() = current_root_R;
+      // m_robot->rootLink()->p() = target_root_p + target_root_R * rel_cog - current_root_R * rel_cog;
+      // m_robot->calcForwardKinematics();
+      // current_base_rpy = rot2rpy(m_robot->rootLink()->R());//for log
+      // current_base_pos = m_robot->rootLink()->p();//for log
       
       //wutest rotate waist, keep foot and CoM in the same place
       m_robot->calcForwardKinematics();
-      if(!CalcIVK_biped(m_robot, current_root_R, m_contactStates, end_link_name))
-	std::cout<<"InverseKinametic bipped error"<<std::endl;
+      if(!CalcIVK_biped(m_robot, current_root_R, m_contactStates, end_link))
+      	std::cout<<"InverseKinametic bipped error"<<std::endl;
 
 
       // foot modif
@@ -1792,8 +1812,8 @@ void Stabilizer::setEefmParameters()
   eefm_pos_damping_gain       = prop_eefm_pos[0];
   eefm_pos_time_const_support = prop_eefm_pos[1];
   eefm_pos_time_const_swing   = prop_eefm_pos[2];
-  eefm_pos_transition_time    = prop_eefm_pos[3];
-  eefm_pos_margin_time        = prop_eefm_pos[4];
+  eefm_pos_transition_time    = prop_eefm_pos[3];//unused
+  eefm_pos_margin_time        = prop_eefm_pos[4];//unused
 
   std::vector<double> prop_eefm_leg;
   coil::stringTo(prop_eefm_leg, prop["eefm_leg"].c_str());
@@ -1834,28 +1854,12 @@ void Stabilizer::setEefmParameters()
 	    << "  cutoff freq = " << eefm_cogvel_cutoff_freq << std::endl
 	    << std::endl;
 
-
   prev_act_cog    = Vector3::Zero();
   prev_act_cogvel = Vector3::Zero();
   prev_ref_cog    = Vector3::Zero();
   prev_ref_zmp    = Vector3::Zero();
   prev_act_foot_origin_rot = Matrix3::Identity();
   prev_ref_foot_origin_rot = Matrix3::Identity();
-}
-
-
-void Stabilizer::setEndLinkName()
-{
-  RTC::Properties& prop = getProperties();
-  
-  end_link_name[RLEG]=prop["RLEG_END"];
-  end_link_name[LLEG]=prop["LLEG_END"];
-  end_link_name[RARM]=prop["RARM_END"];
-  end_link_name[LARM]=prop["LARM_END"];
-  end_link_name[WAIST]=prop["BASE_LINK"];
-  std::cout << "st : end link name" << std::endl;
-  for(int i=0; i<LINKNUM; i++)
-    std::cout << "  " << end_link_name[i] << std::endl;
 }
 
 

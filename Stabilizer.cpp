@@ -271,7 +271,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   ////////////////////////////////////////////////////////////////
   */
   eefm_pos_control_switch=eefm_rot_control_switch=eefm_att_control_switch=1;
-
+  eefm_pos_control_switch=eefm_att_control_switch=1;
 
   //ogawa
   setEefmParameters();
@@ -306,6 +306,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
 
   m_qCurrent.data.length(m_robot->numJoints());
   m_qRef.data.length(m_robot->numJoints());
+  m_qRefHolder.data.length(m_robot->numJoints());
   m_tau.data.length(m_robot->numJoints());
   m_force[0].data.length(6);
   m_force[1].data.length(6);
@@ -330,7 +331,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   }
 
   for ( int i = 0; i < m_robot->numJoints(); i++ )
-    m_qRef.data[i] = 0.0;
+    m_qRef.data[i] = m_qRefHolder.data[i] = 0.0;
 
 
   // for debug output
@@ -403,11 +404,12 @@ RTC::ReturnCode_t Stabilizer::onDeactivated(RTC::UniqueId ec_id)
 #define DEBUGP2 (loop%10==0)
 RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
 {
+  /*
   step_counter+=1;
   step_counter=step_counter%m_nStep;
   if(step_counter!=0)
     return RTC::RTC_OK;
-
+  */
 
   loop++;
   //std::cout<< transition_smooth_gain<<std::endl;
@@ -415,7 +417,15 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
 
   if (m_qRefIn.isNew()) {
     m_qRefIn.read();
+
+    for(int i=0;i<m_qRef.data.length();i++)
+      m_qRefHolder.data[i] = m_qRef.data[i];
   }
+  else{
+   for(int i=0;i<m_qRef.data.length();i++)
+    m_qRef.data[i] = m_qRefHolder.data[i];
+  }
+  
   if (m_qCurrentIn.isNew()) {
     m_qCurrentIn.read();
   }
@@ -497,7 +507,7 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
   if ( m_robot->numJoints() == m_qRef.data.length() ) {
     if (is_legged_robot) {
       for ( int i = 0; i < m_robot->numJoints(); i++ ){
-        m_qRef.data[i] = m_robot->joint(i)->q();
+        m_qRef.data[i] = m_robot->joint(i)->q();//this is no good
         //m_tau.data[i] = m_robot->joint(i)->u;
       }
       m_zmp.data.x = rel_act_zmp(0);
@@ -712,8 +722,8 @@ void Stabilizer::getActualParameters ()
       ref_foot_force[1] = Vector3(0,0, (1-alpha) * 9.8 * total_mass);
 
       //wutest
-      ref_foot_force[0](2)+=force_dz_offset/2;
-      ref_foot_force[1](2)-=force_dz_offset/2;
+      //ref_foot_force[0](2)+=force_dz_offset/2;
+      //ref_foot_force[1](2)-=force_dz_offset/2;
       
 
 
@@ -1852,6 +1862,12 @@ void Stabilizer::setEefmParameters()
 	    << "eefm cog : " << std::endl
 	    << "  cutoff freq = " << eefm_cogvel_cutoff_freq << std::endl
 	    << std::endl;
+  prev_act_cog    = Vector3::Zero();
+  prev_act_cogvel = Vector3::Zero();
+  prev_ref_cog    = Vector3::Zero();
+  prev_ref_zmp    = Vector3::Zero();
+  prev_act_foot_origin_rot = Matrix3::Identity();
+  prev_ref_foot_origin_rot = Matrix3::Identity();
 }
 
 

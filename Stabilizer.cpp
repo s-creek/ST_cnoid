@@ -57,7 +57,7 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_contactStatesIn("contactStates", m_contactStates),
     m_controlSwingSupportTimeIn("controlSwingSupportTime", m_controlSwingSupportTime),
     m_localEEposIn("localEEpos", m_localEEpos),
-    m_qRefOut("q", m_qRef),
+    m_qRefOut("q", m_qRefToRobot),
     m_tauOut("tau", m_tau),
     m_zmpOut("zmp", m_zmp),
     // for debug output
@@ -306,7 +306,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
 
   m_qCurrent.data.length(m_robot->numJoints());
   m_qRef.data.length(m_robot->numJoints());
-  m_qRefHolder.data.length(m_robot->numJoints());
+  m_qRefToRobot.data.length(m_robot->numJoints());
   m_tau.data.length(m_robot->numJoints());
   m_force[0].data.length(6);
   m_force[1].data.length(6);
@@ -331,7 +331,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   }
 
   for ( int i = 0; i < m_robot->numJoints(); i++ )
-    m_qRef.data[i] = m_qRefHolder.data[i] = 0.0;
+    m_qRef.data[i] = m_qRefToRobot.data[i] = 0.0;
 
 
   // for debug output
@@ -417,15 +417,7 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
 
   if (m_qRefIn.isNew()) {
     m_qRefIn.read();
-
-    for(int i=0;i<m_qRef.data.length();i++)
-      m_qRefHolder.data[i] = m_qRef.data[i];
   }
-  else{
-   for(int i=0;i<m_qRef.data.length();i++)
-    m_qRef.data[i] = m_qRefHolder.data[i];
-  }
-  
   if (m_qCurrentIn.isNew()) {
     m_qCurrentIn.read();
   }
@@ -506,10 +498,11 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
   }
   if ( m_robot->numJoints() == m_qRef.data.length() ) {
     if (is_legged_robot) {
+
       for ( int i = 0; i < m_robot->numJoints(); i++ ){
-        m_qRef.data[i] = m_robot->joint(i)->q();//this is no good
-        //m_tau.data[i] = m_robot->joint(i)->u;
-      }
+        m_qRefToRobot.data[i] = m_robot->joint(i)->q();
+       }
+
       m_zmp.data.x = rel_act_zmp(0);
       m_zmp.data.y = rel_act_zmp(1);
       m_zmp.data.z = rel_act_zmp(2);
